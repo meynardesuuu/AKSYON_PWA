@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="fil">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#8B1A1A">
+<title>AKSYON! – Civic Complaint Platform</title>
+<link rel="icon" type="image/x-icon" href="icon/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- CSS -->
+<link rel="stylesheet" href="pwa.css">
+<!-- PWA -->
+<link rel="manifest" href="pwa.manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AKSYON!">
+</head>
+<body>
+<div id="toast"></div>
+<div id="loading-overlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <p>Nag-load...</p>
+</div>
+
+<div id="app">
+
+<!-- ══ LOGIN ══ -->
+<div id="screen-login">
+  <div class="login-hero">
+    <div class="aksyon-wordmark">AKSYON!</div>
+    <div class="aksyon-sub">Civic Complaint Platform</div>
+    <div class="aksyon-tagline">Iulat. I-track. Makita ang pagbabago.</div>
+  </div>
+  <div class="login-body">
+    <div class="input-field">
+      <span class="field-icon">✉️</span>
+      <input type="email" id="login-email" placeholder="Email address">
+    </div>
+    <div class="input-field">
+      <span class="field-icon">🔒</span>
+      <input type="password" id="login-password" placeholder="Password">
+    </div>
+    <div class="login-meta">
+      <span class="link-text" onclick="showToast('Password reset coming soon')">Nakalimutan ang password?</span>
+      <button class="bypass-btn" onclick="doAnonymousLogin()">↩ Demo</button>
+    </div>
+    <button class="btn-full" onclick="doLogin()">MAG-LOGIN</button>
+    <div class="divider"><span>o mag-sign up</span></div>
+    <div class="social-row">
+      <button class="btn-social" onclick="showSignupScreen(true)"><span style="font-weight:700;color:#8B1A1A">+</span> Bagong Account</button>
+      <button class="btn-social" onclick="doAnonymousLogin()"><span style="font-weight:700;color:#1877F2">G</span> Demo Login</button>
+    </div>
+    <div class="signup-row">Wala pang account? <span onclick="showSignupScreen(true)">Mag-sign up</span></div>
+  </div>
+</div>
+
+<!-- ══ SIGN UP ══ -->
+<div id="screen-signup">
+  <div class="signup-hero">
+    <button class="signup-back-btn" onclick="showSignupScreen(false)">←</button>
+    <div class="signup-hero-title">Sign Up</div>
+  </div>
+  <div class="signup-body">
+    <div class="signup-field-group">
+      <div class="signup-field-label">First Name</div>
+      <div class="signup-input-wrap">
+        <input type="text" id="su-firstname" placeholder="Hal. Juan" autocomplete="given-name">
+      </div>
+    </div>
+    <div class="signup-field-group">
+      <div class="signup-field-label">Last Name</div>
+      <div class="signup-input-wrap">
+        <input type="text" id="su-lastname" placeholder="Hal. Dela Cruz" autocomplete="family-name">
+      </div>
+    </div>
+    <div class="signup-field-group">
+      <div class="signup-field-label">Email</div>
+      <div class="signup-input-wrap">
+        <input type="email" id="su-email" placeholder="email@halimbawa.com" autocomplete="email">
+      </div>
+    </div>
+    <div class="signup-field-group">
+      <div class="signup-field-label">Password</div>
+      <div class="signup-input-wrap" style="position:relative;">
+        <input type="password" id="su-password" placeholder="••••••••" autocomplete="new-password" oninput="checkPasswordStrength(this.value)">
+        <button class="pw-toggle" onclick="togglePw('su-password', this)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BDBDBD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+      <div class="pw-strength-row">
+        <span class="pw-strength-label">STRENGTH:</span>
+        <span class="pw-strength-val" id="pw-strength-val">—</span>
+      </div>
+      <div class="pw-rules">
+        <div class="pw-rule" id="rule-length"><span class="rule-dot"></span> Minimum of 8 characters</div>
+        <div class="pw-rule" id="rule-special"><span class="rule-dot"></span> Contains special character</div>
+        <div class="pw-rule" id="rule-number"><span class="rule-dot"></span> Contains numbers</div>
+      </div>
+    </div>
+    <div class="signup-field-group">
+      <div class="signup-field-label">Contact Number</div>
+      <div class="signup-input-wrap">
+        <input type="tel" id="su-phone" placeholder="+63 912 345 6789" autocomplete="tel">
+      </div>
+    </div>
+    <button class="btn-full" id="su-btn" onclick="doRegister()" style="margin-top:8px;">MAGREGISTER</button>
+    <div class="signup-login-row">Mayroon nang account? <span onclick="showSignupScreen(false)">Mag-login</span></div>
+  </div>
+</div>
+
+<!-- ══ TAB SHELL ══ -->
+<div id="tab-shell">
+
+  <!-- HOME TAB -->
+  <div class="tab-panel active" id="tab-home">
+    <div class="home-header">
+      <div class="home-header-row">
+        <div>
+          <div class="location-pill" onclick="requestGPSFromHome()" id="home-location-pill">
+            <span class="gps-dot" id="home-gps-dot" style="background:#BDBDBD;"></span>
+            <span id="home-gps-text">Kinukuha ang lokasyon...</span>
+          </div>
+          <div class="location-name-big" id="home-brgy-name">San Jose del Monte, Bulacan</div>
+        </div>
+        <button class="notif-btn" onclick="showToast('Walang bagong notification')">
+          🕭<div class="notif-dot"></div>
+        </button>
+      </div>
+    </div>
+    <div class="scroll-area" id="home-scroll">
+      <div class="section-header">
+        <div class="section-title"><span class="section-dot"></span> Mga Ulat Nearby</div>
+      </div>
+      <div id="nearby-list">
+        <div style="text-align:center;padding:20px;color:#999;">Nag-load ng reports...</div>
+      </div>
+      <div class="see-more-row">
+        <div class="count-bubble" onclick="openCommunityReports()">Tingnan lahat</div>
+      </div>
+      <div class="section-header" style="margin-top:4px;">
+        <div class="section-title"><span class="section-dot" style="background:#2E7D32;"></span> Mga Na-resolve</div>
+      </div>
+      <div id="resolved-list">
+        <div style="text-align:center;padding:20px;color:#999;">Nag-load ng reports...</div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+    <button class="fab" onclick="pushScreen('submit')">✏️ &nbsp;SUMULAT NG REPORT</button>
+  </div>
+
+  <!-- REPORTS TAB -->
+  <div class="tab-panel" id="tab-reports">
+    <div class="top-bar reports-top-bar" id="reports-top-bar">
+      <button class="reports-title-btn" id="reports-title-btn"
+        onclick="toggleScopeDropdown(event)" aria-expanded="false" aria-haspopup="listbox">
+        <h2 id="reports-tab-title">📋 Mga Report Ko</h2>
+        <span class="dropdown-caret">▾</span>
+      </button>
+      <div class="scope-dropdown" id="scope-dropdown" role="listbox">
+        <button class="scope-option active" id="scope-opt-mine"
+          onclick="selectScope('mine')" role="option">
+          <span class="scope-option-icon">👤</span> Mga Report Ko
+        </button>
+        <button class="scope-option" id="scope-opt-community"
+          onclick="selectScope('community')" role="option">
+          <span class="scope-option-icon">🌐</span> Community Reports
+        </button>
+      </div>
+    </div>
+    <div class="filter-bar" id="reports-filter-bar">
+      <button class="filter-chip active" data-filter="lahat" onclick="filterReports(this)">Lahat</button>
+      <button class="filter-chip" data-filter="pending" onclick="filterReports(this)">Pending</button>
+      <button class="filter-chip" data-filter="inreview" onclick="filterReports(this)">In-Review</button>
+      <button class="filter-chip" data-filter="resolved" onclick="filterReports(this)">Resolved</button>
+    </div>
+    <div class="scroll-area">
+      <div class="stats-strip">
+        <div class="stat-pill red"><div class="num" id="stat-total">0</div><div class="lbl">ISINUMITE</div></div>
+        <div class="stat-pill blue"><div class="num" id="stat-inreview">0</div><div class="lbl">IN-REVIEW</div></div>
+        <div class="stat-pill green"><div class="num" id="stat-resolved">0</div><div class="lbl">RESOLVED</div></div>
+      </div>
+      <div id="reports-list" style="padding-top:10px;">
+        <div style="text-align:center;padding:20px;color:#999;">Nag-load ng reports...</div>
+      </div>
+      <div class="spacer"></div>
+    </div>
+  </div>
+
+  <!-- PROFILE TAB -->
+  <div class="tab-panel" id="tab-profile">
+    <div class="profile-hero-bg">
+      <div class="profile-avatar-row">
+        <div class="avatar-circle">👤</div>
+        <div>
+          <div class="profile-uname" id="profile-name">USER</div>
+          <div class="profile-email" id="profile-email">user@email.com</div>
+          <div class="profile-brgy" id="profile-brgy">Brgy. Francisco Homes-Mulawin, SJDM</div>
+          <div class="verified-tag">✓ Verified Resident</div>
+        </div>
+      </div>
+    </div>
+    <div class="scroll-area">
+      <div class="profile-stats">
+        <div class="p-stat"><div class="n" id="ps-total" style="color:#C62828;">0</div><div class="l">REPORTS</div></div>
+        <div class="p-stat"><div class="n" id="ps-resolved" style="color:#2E7D32;">0</div><div class="l">RESOLVED</div></div>
+        <div class="p-stat"><div class="n" id="ps-pending" style="color:#F57F17;">0</div><div class="l">PENDING</div></div>
+      </div>
+      <div class="menu-group-label" style="padding-left:14px;padding-top:16px;">ACCOUNT</div>
+      <div class="menu-group">
+        <div class="menu-row" onclick="pushScreen('editprofile')">
+          <div class="menu-ico red">✏️</div>
+          <div class="menu-txt"><div class="menu-title">I-edit ang Profile</div><div class="menu-sub">Pangalan, larawan, contact</div></div>
+          <span class="menu-arrow">›</span>
+        </div>
+        <div class="menu-row" onclick="pushScreen('aktibidad')">
+          <div class="menu-ico blue">📋</div>
+          <div class="menu-txt"><div class="menu-title">Mga Aktibidad</div><div class="menu-sub">History ng iyong mga report</div></div>
+          <span class="menu-arrow">›</span>
+        </div>
+        <div class="menu-row" onclick="pushScreen('notif')">
+          <div class="menu-ico yellow">🔔</div>
+          <div class="menu-txt"><div class="menu-title">Notification Settings</div><div class="menu-sub">I-manage ang mga alerto</div></div>
+          <span class="menu-arrow">›</span>
+        </div>
+      </div>
+      <div class="menu-group-label" style="padding-left:14px;padding-top:16px;">PRIVACY & LEGAL</div>
+      <div class="menu-group">
+        <div class="menu-row" onclick="showToast('Password change coming soon')">
+          <div class="menu-ico gray">🔒</div>
+          <div class="menu-txt"><div class="menu-title">Palitan ang Password</div><div class="menu-sub">I-update ang iyong password</div></div>
+          <span class="menu-arrow">›</span>
+        </div>
+        <div class="menu-row" onclick="showToast('Privacy Policy – Basahin sa website')">
+          <div class="menu-ico gray">📄</div>
+          <div class="menu-txt"><div class="menu-title">Privacy Policy</div><div class="menu-sub">Basahin ang aming patakaran</div></div>
+          <span class="menu-arrow">›</span>
+        </div>
+      </div>
+      <div class="logout-row">
+        <button class="logout-btn" onclick="doLogout()">
+          <span style="font-size:16px;">↩️</span>
+          <span>Mag-logout</span>
+          <span style="margin-left:auto;color:#BDBDBD;font-size:18px;">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM NAV: outside tab-shell so it's always in the flex column of #app -->
+<div id="bottom-nav">
+  <button class="nav-btn active" id="nav-home" onclick="switchTab('home')">
+    <div class="nav-indicator"></div><span class="nav-icon">🏠</span><span class="nav-label">HOME</span>
+  </button>
+  <button class="nav-btn" id="nav-reports" onclick="openMyReports()">
+    <div class="nav-indicator"></div><span class="nav-icon">📋</span><span class="nav-label">REPORTS</span>
+  </button>
+  <button class="nav-btn" id="nav-profile" onclick="switchTab('profile')">
+    <div class="nav-indicator"></div><span class="nav-icon">👤</span><span class="nav-label">PROFILE</span>
+  </button>
+</div>
+
+<!-- ══ SCREENS ══ -->
+
+<!-- SUBMIT -->
+<div class="screen" id="screen-submit">
+  <div class="top-bar">
+    <button class="back-btn" onclick="popScreen()">←</button>
+    <h2>Magsumite ng Report</h2>
+  </div>
+  <div class="scroll-area">
+    <div id="map-container">
+      <div id="leaflet-map"></div>
+      <div class="gps-pill" id="gps-pill">
+        <span class="gps-dot" id="gps-dot" style="background:#BDBDBD;"></span>
+        <span id="gps-text">I-tap ang locate para i-detect ang lokasyon</span>
+      </div>
+      <button id="locate-btn" onclick="requestGPS()" class="locate-btn">📍 I-locate ako</button>
+    </div>
+    <div class="form-section">
+      <div class="field-group">
+        <div class="field-label req">PAMAGAT NG ULAT</div>
+        <input class="text-in" id="f-title" placeholder="Hal. Sirang ilaw sa Narra St.">
+      </div>
+      <div class="field-group">
+        <div class="field-label req">KATEGORYA</div>
+        <div class="cat-grid" id="cat-grid">
+          <div class="cat-chip active" data-cat="Ilaw" onclick="selectCat(this)">💡 Ilaw</div>
+          <div class="cat-chip" data-cat="Kalsada" onclick="selectCat(this)">🚧 Kalsada</div>
+          <div class="cat-chip" data-cat="Basura" onclick="selectCat(this)">🗑️ Basura</div>
+          <div class="cat-chip" data-cat="Tubig" onclick="selectCat(this)">💧 Tubig</div>
+          <div class="cat-chip" data-cat="Baha" onclick="selectCat(this)">🌊 Baha</div>
+          <div class="cat-chip" data-cat="Iba pa" onclick="selectCat(this)">📌 Iba pa</div>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label req">ANTAS NG URGENCY</div>
+        <div class="urgency-row">
+          <button class="urgency-btn low" data-urg="Mababa" onclick="selectUrgency(this)">🟢 Mababa</button>
+          <button class="urgency-btn med active" data-urg="Katamtaman" onclick="selectUrgency(this)">🟡 Katamtaman</button>
+          <button class="urgency-btn high" data-urg="Mataas" onclick="selectUrgency(this)">🔴 Mataas</button>
+        </div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">LARAWAN / PATUNAY</div>
+        <div class="photo-zone" onclick="document.getElementById('photo-input').click()">
+          <div class="photo-zone-icon">📷</div>
+          <div class="photo-zone-text">I-upload ang litrato o mag-video</div>
+          <div class="photo-zone-sub">PNG, JPG, MP4 hanggang 50MB bawat file</div>
+        </div>
+        <input type="file" id="photo-input" multiple accept="image/*,video/*" style="display:none;" onchange="handlePhotoUpload(event)">
+        <div class="photo-previews" id="photo-previews"></div>
+      </div>
+      <div class="field-group">
+        <div class="field-label">DETALYE <span style="color:#BDBDBD;font-size:10px;text-transform:lowercase;font-weight:400;">(opsyonal)</span></div>
+        <textarea class="text-in" id="f-detail" placeholder="Magdagdag ng karagdagang impormasyon..."></textarea>
+      </div>
+      <button class="btn-full" id="submit-btn" onclick="submitReport()">✓ &nbsp;ISUMITE ANG REPORT</button>
+      <div style="height:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- AKTIBIDAD -->
+<div class="screen" id="screen-aktibidad">
+  <div class="top-bar">
+    <button class="back-btn" onclick="popScreen()">←</button>
+    <h2>Mga Aktibidad</h2>
+  </div>
+  <div class="filter-bar" id="akt-filter-bar">
+    <button class="filter-chip active" data-filter="lahat" onclick="filterAkt(this)">Lahat</button>
+    <button class="filter-chip" data-filter="pending" onclick="filterAkt(this)">Pending</button>
+    <button class="filter-chip" data-filter="inreview" onclick="filterAkt(this)">In-Review</button>
+    <button class="filter-chip" data-filter="resolved" onclick="filterAkt(this)">Resolved</button>
+  </div>
+  <div class="scroll-area" id="akt-list">
+    <div style="text-align:center;padding:20px;color:#999;">Nag-load ng activities...</div>
+  </div>
+</div>
+
+<!-- DETAIL -->
+<div class="screen" id="screen-detail">
+  <div class="top-bar">
+    <button class="back-btn" onclick="popScreen()">←</button>
+    <h2 id="detail-header-title">Detalye ng Report</h2>
+    <button class="top-bar-action" onclick="shareReport()">⌲</button>
+  </div>
+  <div class="scroll-area" id="detail-content">
+    <div style="text-align:center;padding:20px;color:#999;">Nag-load...</div>
+  </div>
+</div>
+
+<!-- EDIT PROFILE -->
+<div class="screen" id="screen-editprofile">
+  <div class="top-bar">
+    <button class="back-btn" onclick="popScreen()">←</button>
+    <h2>I-edit ang Profile</h2>
+  </div>
+  <div class="scroll-area">
+    <div class="avatar-section">
+      <div class="avatar-big">👤</div>
+      <button class="change-photo-btn" onclick="showToast('Photo upload coming soon')">Palitan ang larawan</button>
+    </div>
+    <div class="edit-form">
+      <div class="field-group"><div class="field-label req">APELYIDO</div><input class="text-in" id="edit-lastname" placeholder="Dela Cruz"></div>
+      <div class="field-group"><div class="field-label req">PANGALAN</div><input class="text-in" id="edit-firstname" placeholder="Juan"></div>
+      <div class="field-group"><div class="field-label">EMAIL</div><input class="text-in" type="email" id="edit-email" readonly></div>
+      <div class="field-group"><div class="field-label">CONTACT NUMBER</div><input class="text-in" type="tel" id="edit-phone" placeholder="+63 912 345 6789"></div>
+      <div class="field-group"><div class="field-label">BARANGAY</div><input class="text-in" id="edit-brgy" placeholder="Brgy. Francisco Homes-Mulawin"></div>
+      <div class="field-group"><div class="field-label">BAYAN / LUNGSOD</div><input class="text-in" id="edit-city" placeholder="San Jose del Monte, Bulacan"></div>
+      <button class="btn-full" onclick="saveProfile()">I-SAVE ANG MGA PAGBABAGO</button>
+      <div style="height:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- NOTIF SETTINGS -->
+<div class="screen" id="screen-notif">
+  <div class="top-bar">
+    <button class="back-btn" onclick="popScreen()">←</button>
+    <h2>Notification Settings</h2>
+  </div>
+  <div class="scroll-area" style="padding-top:14px;">
+    <div class="section-label">MGA REPORT KO</div>
+    <div class="notif-section">
+      <div class="notif-row"><span class="notif-ico">📊</span><div class="notif-info"><div class="notif-title">Status Update</div><div class="notif-sub">Kapag na-update ang report mo</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+      <div class="notif-row"><span class="notif-ico">✅</span><div class="notif-info"><div class="notif-title">Naayos na ang Report</div><div class="notif-sub">Kapag na-resolve ang iyong ulat</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+      <div class="notif-row"><span class="notif-ico">💬</span><div class="notif-info"><div class="notif-title">Tugon ng LGU</div><div class="notif-sub">Kapag nag-comment ang LGU</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+    </div>
+    <div class="section-label">KOMUNIDAD</div>
+    <div class="notif-section">
+      <div class="notif-row"><span class="notif-ico">📍</span><div class="notif-info"><div class="notif-title">Bagong Report sa Lugar Ko</div><div class="notif-sub">Mga ulat malapit sa iyong barangay</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+      <div class="notif-row"><span class="notif-ico">📢</span><div class="notif-info"><div class="notif-title">Anunsyo ng Barangay</div><div class="notif-sub">Opisyal na balita mula sa LGU</div></div><button class="toggle-track off" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+    </div>
+    <div class="section-label">CHANNELS</div>
+    <div class="notif-section">
+      <div class="notif-row"><span class="notif-ico">📱</span><div class="notif-info"><div class="notif-title">Push Notifications</div><div class="notif-sub">Sa loob ng app</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+      <div class="notif-row"><span class="notif-ico">✉️</span><div class="notif-info"><div class="notif-title">Email Notifications</div><div class="notif-sub">Sa iyong email address</div></div><button class="toggle-track off" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+    </div>
+    <div class="spacer"></div>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<!-- MEDIA VIEWER -->
+<div id="media-viewer" class="media-viewer" onclick="closeMediaViewer(event)">
+  <button class="media-viewer-close" onclick="closeMediaViewer(event)">✕</button>
+  <div class="media-viewer-content" id="media-viewer-content" onclick="event.stopPropagation()"></div>
+</div>
+
+<!-- Dropdown position patch: centers scope-dropdown via fixed coords -->
+<script>
+(function(){
+  function positionDropdown(){
+    var btn = document.getElementById('reports-title-btn');
+    var dd  = document.getElementById('scope-dropdown');
+    if(!btn || !dd) return;
+    var r = btn.getBoundingClientRect();
+    dd.style.top  = (r.bottom + 6) + 'px';
+    dd.style.left = (r.left + r.width / 2) + 'px';
+    dd.style.transform = 'translateX(-50%)';
+  }
+  // Patch toggleScopeDropdown once pwa.js has defined it
+  document.addEventListener('DOMContentLoaded', function(){
+    var _orig = window.toggleScopeDropdown;
+    window.toggleScopeDropdown = function(e){
+      positionDropdown();
+      if(_orig) _orig(e);
+    };
+    // Re-position on resize/scroll in case layout shifts
+    window.addEventListener('resize', function(){
+      var dd = document.getElementById('scope-dropdown');
+      if(dd && dd.classList.contains('open')) positionDropdown();
+    });
+  });
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/pwa.sw.js')
+    .then(reg => console.log('✅ Service Worker registered:', reg))
+    .catch(err => console.error('❌ Service Worker error:', err));
+}
+</script>
+
+<!-- Scripts -->
+<script src="pwa.js"></script>
+</body>
+</html>
