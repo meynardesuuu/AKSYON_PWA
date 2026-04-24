@@ -1,10 +1,10 @@
 const CACHE_NAME = 'aksyon-v1';
 const urlsToCache = [
-  '/',
-  '/pwa.html',
-  '/pwa.css',
-  '/pwa.js',
-  '/pwa.manifest.json'
+  './',
+  './index.html',
+  './pwa.css',
+  './pwa.js',
+  './pwa.manifest.json'
 ];
 
 self.addEventListener('install', event => {
@@ -50,7 +50,7 @@ self.addEventListener('fetch', event => {
         });
         return response;
       }).catch(() => {
-        return caches.match('/pwa.html');
+        return caches.match('./index.html').then(match => match || caches.match('./'));
       });
     })
   );
