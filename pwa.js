@@ -79,7 +79,7 @@ const db = {
   async getReports(limit = 100) {
     const { data, error } = await supabaseClient
       .from('reports')
-      .select('id,title,detail,category,urgency,status,location,user_id,user_name,user_email,upvotes,upvoted_by,attachments,created_at,updated_at')
+      .select('id,title,detail,category,urgency,status,location,user_id,user_name,user_email,upvotes,upvoted_by,attachments,comments,created_at,updated_at')
       .order('created_at', { ascending: false })
       .limit(limit);
     if (error) throw error;
@@ -552,6 +552,14 @@ async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
     console.log('✅ Loaded', userReports.length, 'reports (limit:', limit + ')');
     CACHE.set('reports', userReports);
     renderAll();
+    if (currentDetailReportId && document.getElementById('screen-detail')?.classList.contains('active')) {
+      db.getReportById(currentDetailReportId).then(fresh => {
+        if (!fresh) return;
+        const idx = userReports.findIndex(x => String(x.id) === String(currentDetailReportId));
+        if (idx >= 0) userReports[idx] = fresh;
+        renderDetail_wrapper(fresh);
+      }).catch(() => {});
+    }
   } catch (error) {
     console.error('❌ Error loading reports:', error);
     if (userReports.length === 0) {
@@ -690,7 +698,12 @@ function renderAll() {
 }
 
 function chipLabel(s) {
-  return { pending: '⏳ Pending', inreview: '🔍 In-Review', resolved: '✅ Resolved' }[s] || s;
+  return {
+    pending: '⏳ Pending',
+    inreview: '🔎 Reviewed',
+    resolved: '✅ Resolved',
+    false: '🚩 False Report',
+  }[s] || s;
 }
 
 function getTimeAgo(dateString) {
@@ -708,9 +721,9 @@ function getIconForCategory(cat) {
   return { Ilaw: '💡', Kalsada: '🚧', Basura: '🗑️', Tubig: '💧', Baha: '🌊', 'Iba pa': '📌' }[cat] || '📌';
 }
 
-function stepFromStatus(s) { return { pending:1, inreview:2, resolved:4 }[s] || 1; }
-function progressFromStatus(s) { return { pending:20, inreview:60, resolved:100 }[s] || 20; }
-function pcolorFromStatus(s) { return { pending:'yellow', inreview:'blue', resolved:'green' }[s] || 'yellow'; }
+function stepFromStatus(s) { return { pending:1, inreview:2, resolved:3, false:2 }[s] || 1; }
+function progressFromStatus(s) { return { pending:24, inreview:62, resolved:100, false:62 }[s] || 24; }
+function pcolorFromStatus(s) { return { pending:'yellow', inreview:'blue', resolved:'green', false:'blue' }[s] || 'yellow'; }
 
 function escHtml(str) {
   if (!str) return '';
@@ -779,7 +792,12 @@ function renderReports() {
   listEl.innerHTML = filtered.map(r => {
     const prog = progressFromStatus(r.status);
     const pcol = pcolorFromStatus(r.status);
-    const stepLbl = { pending:'Nakareceive', inreview:'Inimbestigahan', resolved:'Naayos na ✓' }[r.status] || '';
+    const stepLbl = {
+      pending:'Natanggap',
+      inreview:'Na-review na',
+      resolved:'Naayos na ✓',
+      false:'Na-flag para sa beripikasyon',
+    }[r.status] || '';
     const reporterName = escHtml(r.user_name || 'Unknown user');
     const mediaPreview = getReportMediaPreview(r);
     return `<div class="report-row" onclick="openDetail('${r.id}')">
@@ -863,14 +881,14 @@ function renderAkt() {
     listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Walang aktibidad pa</div>';
     return;
   }
-  const steps = ['Received','Review','Action','Done'];
+  const steps = ['Received','Reviewed','Resolved'];
   listEl.innerHTML = '<div style="height:10px;"></div>' + filtered.map(r => {
     const stepN = stepFromStatus(r.status);
     const prog = progressFromStatus(r.status);
-    const pct = r.status==='resolved'?'p100':(prog>=60?'p50':'p25');
-    const pclr = r.status==='resolved'?'':'blue';
+    const pct = r.status==='resolved' ? 'p100' : (prog >= 60 ? 'p50' : 'p25');
+    const pclr = r.status === 'resolved' ? '' : 'blue';
     const nodes = steps.map((s,i) => {
-      const done = r.status==='resolved'||i<stepN;
+      const done = r.status==='resolved' || i < stepN;
       const active = !done&&i===stepN-1;
       return `<div class="step-node">
         <div class="step-circle ${done?'done':(active?'active':'')}"></div>
@@ -920,11 +938,11 @@ async function openDetail(reportId) {
     if (!r) return;
     document.getElementById('detail-header-title').textContent = r.category || 'Report';
     const isVoted = Array.isArray(r.upvoted_by) && currentUser && r.upvoted_by.includes(currentUser.id);
-    const steps = ['Received','Review','Action','Done'];
+    const steps = ['Received','Reviewed','Resolved'];
     const stepN = stepFromStatus(r.status);
     const prog = progressFromStatus(r.status);
-    const pct = r.status==='resolved'?'p100':(prog>=60?'p50':'p25');
-    const pclr = r.status==='resolved'?'':'blue';
+    const pct = r.status==='resolved' ? 'p100' : (prog>=60 ? 'p50' : 'p25');
+    const pclr = r.status==='resolved' ? '' : 'blue';
     const stepNodes = steps.map((s,i)=>{
       const done = r.status==='resolved'||i<stepN;
       const active = !done&&i===stepN-1;
@@ -950,8 +968,11 @@ async function openDetail(reportId) {
         </div>`;
     }
 
-    const commentsHTML = r.comments?.length
-      ? r.comments.map(c=>`
+    const sortedComments = Array.isArray(r.comments)
+      ? [...r.comments].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+      : [];
+    const commentsHTML = sortedComments.length
+      ? sortedComments.map(c=>`
           <div class="comment-item">
             <div><span class="comment-who">${escHtml(c.user_name||'User')}</span>
             <span class="comment-when"> · ${getTimeAgo(c.created_at)}</span></div>
@@ -992,7 +1013,7 @@ async function openDetail(reportId) {
           <div class="step-row">${stepNodes}</div>
         </div>
       </div>
-      <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Komento</div></div>
+      <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Komento / Updates</div></div>
       <div class="detail-comment-box">${commentsHTML}</div>
       <div style="padding:12px;">
         <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F5F5F7;">
