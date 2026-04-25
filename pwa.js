@@ -523,12 +523,27 @@ function subscribeToReports() {
   }
   realtimeChannel = supabaseClient
     .channel('reports-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, () => {
-      console.log('📡 Realtime: reports changed');
-      CACHE.reports.timestamp = 0; // Invalidate cache
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
+      // For UPDATE: patch in-place so there is no full reload / screen flicker
+      if (payload.eventType === 'UPDATE' && payload.new) {
+        const idx = userReports.findIndex(r => String(r.id) === String(payload.new.id));
+        if (idx >= 0) {
+          userReports[idx] = payload.new;
+          CACHE.set('reports', userReports);
+          renderAll();
+          if (String(currentDetailReportId) === String(payload.new.id) &&
+              document.getElementById('screen-detail') &&
+              document.getElementById('screen-detail').classList.contains('active')) {
+            renderDetailContent(payload.new);
+          }
+          return;
+        }
+      }
+      // INSERT or DELETE (or unknown record) — full reload
+      CACHE.reports.timestamp = 0;
       loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
     })
-    .subscribe(status => console.log('📡 Realtime status:', status));
+    .subscribe();
 }
 
 // ── MODIFIED: loadAllReports with caching ──
@@ -552,12 +567,13 @@ async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
     console.log('✅ Loaded', userReports.length, 'reports (limit:', limit + ')');
     CACHE.set('reports', userReports);
     renderAll();
-    if (currentDetailReportId && document.getElementById('screen-detail')?.classList.contains('active')) {
+    if (currentDetailReportId && document.getElementById('screen-detail') &&
+        document.getElementById('screen-detail').classList.contains('active')) {
       db.getReportById(currentDetailReportId).then(fresh => {
         if (!fresh) return;
         const idx = userReports.findIndex(x => String(x.id) === String(currentDetailReportId));
         if (idx >= 0) userReports[idx] = fresh;
-        renderDetail_wrapper(fresh);
+        renderDetailContent(fresh); // Re-render status/comments in place — no screen push
       }).catch(() => {});
     }
   } catch (error) {
@@ -928,218 +944,183 @@ function renderProfileStats() {
   set('ps-pending', mine.filter(r => r.status==='pending').length);
 }
 
+// ── DETAIL CONTENT RENDERER (pure — no screen-push side-effects) ─────────
+function renderDetailContent(r) {
+  if (!r) return;
+  document.getElementById('detail-header-title').textContent = r.category || 'Report';
+  const isVoted = Array.isArray(r.upvoted_by) && currentUser && r.upvoted_by.includes(currentUser.id);
+  const steps = ['Received','Reviewed','Resolved'];
+  const stepN = stepFromStatus(r.status);
+  const prog = progressFromStatus(r.status);
+  const pct = r.status==='resolved' ? 'p100' : (prog>=60 ? 'p50' : 'p25');
+  const pclr = r.status==='resolved' ? '' : 'blue';
+  const stepNodes = steps.map((s,i)=>{
+    const done = r.status==='resolved'||i<stepN;
+    const active = !done&&i===stepN-1;
+    return `<div class="step-node">
+      <div class="step-circle ${done?'done':(active?'active':'')}"></div>
+      <div class="step-name ${done?'done':(active?'active':'')}">${s}</div>
+    </div>`;
+  }).join('');
+
+  let attachHTML = '';
+  if (r.attachments && r.attachments.length) {
+    const thumbs = r.attachments.map(att => {
+      const safeUrl = escHtml(att.url || '');
+      const safeType = escHtml(att.type || '');
+      const safeName = escHtml((att.name || 'file').substring(0, 14));
+      const isImg = att.type && String(att.type).startsWith('image/');
+      const isVid = att.type && String(att.type).startsWith('video/');
+      const preview = isImg
+        ? `<img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" onerror="this.parentElement.innerHTML='\uD83D\uDCCE'">`
+        : `<div style="width:100%;height:100%;background:#222;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:28px;">\uD83C\uDFA5</div>`;
+      return `<div class="attachment-item" onclick="viewAttachment('${safeUrl}','${safeType}')" style="cursor:pointer;">
+        <div class="attachment-preview">${preview}</div>
+        <div class="attachment-name">${safeName}</div>
+      </div>`;
+    }).join('');
+    attachHTML = `<div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Larawan/Video</div></div><div style="display:flex;gap:10px;padding:0 12px 12px;flex-wrap:wrap;">${thumbs}</div>`;
+  }
+
+  const sortedComments = Array.isArray(r.comments)
+    ? [...r.comments].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+    : [];
+  const commentsHTML = sortedComments.length
+    ? sortedComments.map(c => {
+        const who = c.is_admin ? '\uD83D\uDCE2 Dispatcher' : escHtml(c.user_name || 'User');
+        return `<div class="comment-item">
+          <div><span class="comment-who">${who}</span>
+          <span class="comment-when"> \u00b7 ${getTimeAgo(c.created_at)}</span></div>
+          <div class="${c.is_admin ? 'lgu-comment' : ''}"><div class="comment-text">${escHtml(c.text)}</div></div>
+        </div>`;
+      }).join('')
+    : '<div style="font-size:13px;color:#BDBDBD;text-align:center;padding:12px 0;">Wala pang komento</div>';
+
+  const _mapId = 'dmap' + String(r.id).replace(/[^a-z0-9]/gi, '');
+  const _rLat = (r.location && r.location.lat) || userLat;
+  const _rLng = (r.location && r.location.lng) || userLng;
+  const _rAddr = (r.location && r.location.address) || '';
+
+  const chipHtml = chipLabel(r.status);
+  document.getElementById('detail-content').innerHTML = `
+    <div id="${_mapId}" style="height:200px;width:100%;flex-shrink:0;background:#C8D8B4;display:block;"></div>
+    <div class="detail-hero">
+      <div class="detail-body">
+        <div class="detail-title">${escHtml(r.title)}</div>
+        <div class="detail-meta">
+          <span class="chip ${r.status}">${chipHtml}</span>
+          <span class="detail-sep">\u00b7</span>
+          <span style="font-size:12px;color:#999;">${escHtml(r.urgency || '')}</span>
+          <span class="detail-sep">\u00b7</span>
+          <span style="font-size:12px;color:#999;">${getTimeAgo(r.created_at)}</span>
+        </div>
+        <div style="font-size:13px;color:#555;line-height:1.6;margin-bottom:12px;">${escHtml(r.detail || 'Walang detalye')}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="upvote-btn ${isVoted ? 'voted' : ''}" onclick="upvoteReport('${r.id}')">
+            ${isVoted ? '\u2764\uFE0F' : '\uD83D\uDD3C'} ${r.upvotes || 0} upvotes
+          </button>
+          <span style="font-size:12px;color:#BDBDBD;">\u00b7 ${escHtml((r.location && r.location.address) || 'Unknown')}</span>
+        </div>
+      </div>
+    </div>
+    ${attachHTML}
+    <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Tracker ng Status</div></div>
+    <div style="background:#fff;margin:0 12px;border-radius:16px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+      <div class="track-wrapper" style="padding-bottom:16px;">
+        <div class="track-bg"></div>
+        <div class="track-progress ${pct} ${pclr}"></div>
+        <div class="step-row">${stepNodes}</div>
+      </div>
+    </div>
+    <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Komento / Updates</div></div>
+    <div class="detail-comment-box">${commentsHTML}</div>
+    <div style="padding:12px;">
+      <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F5F5F7;">
+        <input type="text" id="comment-input" placeholder="Mag-comment..."
+          style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;">
+        <button onclick="submitComment('${r.id}')"
+          style="background:#8B1A1A;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send</button>
+      </div>
+    </div>
+    <div style="height:20px;"></div>`;
+
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (window._detailMap) {
+      try { window._detailMap.remove(); } catch(e) {}
+      window._detailMap = null;
+    }
+    const _el = document.getElementById(_mapId);
+    if (!_el || !window.L) return;
+    const _dm = L.map(_mapId, {
+      zoomControl: true, dragging: true,
+      scrollWheelZoom: false, doubleClickZoom: true,
+      touchZoom: true, boxZoom: false, keyboard: false,
+      attributionControl: false,
+    }).setView([_rLat, _rLng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_dm);
+    const _pin = L.divIcon({
+      html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4));">\uD83D\uDCCD</div>',
+      iconSize: [30, 36], iconAnchor: [15, 36], className: ''
+    });
+    L.marker([_rLat, _rLng], { icon: _pin }).addTo(_dm);
+    L.circle([_rLat, _rLng], { radius: 40, color: '#8B1A1A', fillColor: '#8B1A1A', fillOpacity: 0.12, weight: 2, opacity: 0.4 }).addTo(_dm);
+    if (_rAddr) {
+      L.popup({ closeButton: false, offset: [0, -30] })
+        .setLatLng([_rLat, _rLng])
+        .setContent(`<span style="font-size:12px;font-weight:600;">${escHtml(_rAddr)}</span>`)
+        .openOn(_dm);
+    }
+    _dm.zoomControl.setPosition('bottomright');
+    setTimeout(() => { if (_dm) _dm.invalidateSize(); }, 80);
+    window._detailMap = _dm;
+  }));
+}
+
 // ── DETAIL ──
 async function openDetail(reportId) {
   currentDetailReportId = reportId;
-  // Use cache first for instant render
   let r = userReports.find(x => String(x.id) === String(reportId));
 
-  const renderDetail = (r) => {
-    if (!r) return;
-    document.getElementById('detail-header-title').textContent = r.category || 'Report';
-    const isVoted = Array.isArray(r.upvoted_by) && currentUser && r.upvoted_by.includes(currentUser.id);
-    const steps = ['Received','Reviewed','Resolved'];
-    const stepN = stepFromStatus(r.status);
-    const prog = progressFromStatus(r.status);
-    const pct = r.status==='resolved' ? 'p100' : (prog>=60 ? 'p50' : 'p25');
-    const pclr = r.status==='resolved' ? '' : 'blue';
-    const stepNodes = steps.map((s,i)=>{
-      const done = r.status==='resolved'||i<stepN;
-      const active = !done&&i===stepN-1;
-      return `<div class="step-node">
-        <div class="step-circle ${done?'done':(active?'active':'')}"></div>
-        <div class="step-name ${done?'done':(active?'active':'')}">${s}</div>
-      </div>`;
-    }).join('');
-
-    let attachHTML = '';
-    if (r.attachments?.length) {
-      attachHTML = `<div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Larawan/Video</div></div>
-        <div style="display:flex;gap:10px;padding:0 12px 12px;flex-wrap:wrap;">
-          ${r.attachments.map(att=>`
-            <div class="attachment-item" onclick="viewAttachment('${att.url}','${att.type}')">
-              <div class="attachment-preview">
-                ${att.type?.startsWith('image/')
-                  ? `<img src="${att.url}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" onerror="this.parentElement.innerHTML='📎'">`
-                  : `<div style="width:100%;height:100%;background:#222;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:28px;">🎥</div>`}
-              </div>
-              <div class="attachment-name">${escHtml((att.name||'file').substring(0,14))}</div>
-            </div>`).join('')}
-        </div>`;
-    }
-
-    const sortedComments = Array.isArray(r.comments)
-      ? [...r.comments].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
-      : [];
-    const commentsHTML = sortedComments.length
-      ? sortedComments.map(c=>`
-          <div class="comment-item">
-            <div><span class="comment-who">${escHtml(c.user_name||'User')}</span>
-            <span class="comment-when"> · ${getTimeAgo(c.created_at)}</span></div>
-            <div class="${c.is_admin?'lgu-comment':''}"><div class="comment-text">${escHtml(c.text)}</div></div>
-          </div>`).join('')
-      : '<div style="font-size:13px;color:#BDBDBD;text-align:center;padding:12px 0;">Wala pang komento</div>';
-
-    // ── Build map ID (safe chars only)
-    const _mapId = 'dmap' + String(r.id).replace(/[^a-z0-9]/gi, '');
-
-    document.getElementById('detail-content').innerHTML = `
-      <div id="${_mapId}" style="height:200px;width:100%;flex-shrink:0;background:#C8D8B4;display:block;"></div>
-      <div class="detail-hero">
-        <div class="detail-body">
-          <div class="detail-title">${escHtml(r.title)}</div>
-          <div class="detail-meta">
-            <span class="chip ${r.status}">${chipLabel(r.status)}</span>
-            <span class="detail-sep">·</span>
-            <span style="font-size:12px;color:#999;">${escHtml(r.urgency||'')}</span>
-            <span class="detail-sep">·</span>
-            <span style="font-size:12px;color:#999;">${getTimeAgo(r.created_at)}</span>
-          </div>
-          <div style="font-size:13px;color:#555;line-height:1.6;margin-bottom:12px;">${escHtml(r.detail||'Walang detalye')}</div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <button class="upvote-btn ${isVoted?'voted':''}" onclick="upvoteReport('${r.id}')">
-              ${isVoted?'❤️':'🔼'} ${r.upvotes||0} upvotes
-            </button>
-            <span style="font-size:12px;color:#BDBDBD;">· ${escHtml(r.location?.address||'Unknown')}</span>
-          </div>
-        </div>
-      </div>
-      ${attachHTML}
-      <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Tracker ng Status</div></div>
-      <div style="background:#fff;margin:0 12px;border-radius:16px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-        <div class="track-wrapper" style="padding-bottom:16px;">
-          <div class="track-bg"></div>
-          <div class="track-progress ${pct} ${pclr}"></div>
-          <div class="step-row">${stepNodes}</div>
-        </div>
-      </div>
-      <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Komento / Updates</div></div>
-      <div class="detail-comment-box">${commentsHTML}</div>
-      <div style="padding:12px;">
-        <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F5F5F7;">
-          <input type="text" id="comment-input" placeholder="Mag-comment..."
-            style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;">
-          <button onclick="submitComment('${r.id}')"
-            style="background:#8B1A1A;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send</button>
-        </div>
-      </div>
-      <div style="height:20px;"></div>`;
-
-    // ── Init detail map after DOM is painted (double rAF = reliable)
-    const _rLat = r.location?.lat || userLat;
-    const _rLng = r.location?.lng || userLng;
-    const _rAddr = r.location?.address || '';
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (window._detailMap) {
-        try { window._detailMap.remove(); } catch(e) {}
-        window._detailMap = null;
-      }
-      const _el = document.getElementById(_mapId);
-      if (!_el || !window.L) return;
-
-      const _dm = L.map(_mapId, {
-        zoomControl: true, dragging: true,
-        scrollWheelZoom: false, doubleClickZoom: true,
-        touchZoom: true, boxZoom: false, keyboard: false,
-        attributionControl: false,
-      }).setView([_rLat, _rLng], 16);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_dm);
-
-      const _pin = L.divIcon({
-        html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4));">📍</div>',
-        iconSize: [30, 36], iconAnchor: [15, 36], className: ''
-      });
-      L.marker([_rLat, _rLng], { icon: _pin }).addTo(_dm);
-      L.circle([_rLat, _rLng], { radius: 40, color: '#8B1A1A', fillColor: '#8B1A1A', fillOpacity: 0.12, weight: 2, opacity: 0.4 }).addTo(_dm);
-
-      if (_rAddr) {
-        L.popup({ closeButton: false, offset: [0, -30] })
-          .setLatLng([_rLat, _rLng])
-          .setContent(`<span style="font-size:12px;font-weight:600;">${escHtml(_rAddr)}</span>`)
-          .openOn(_dm);
-      }
-
-      _dm.zoomControl.setPosition('bottomright');
-      setTimeout(() => { if (_dm) _dm.invalidateSize(); }, 80);
-      window._detailMap = _dm;
-    }));
-  };
-
   if (r) {
-    renderDetail(r);
+    renderDetailContent(r);
     pushScreen('detail');
-    // Silently refresh in background
+    // Silently refresh in background for latest status/comments
     db.getReportById(reportId)
-      .then(fresh => { if (fresh) { renderDetail(fresh); const i = userReports.findIndex(x=>String(x.id)===String(reportId)); if(i>=0) userReports[i]=fresh; } })
+      .then(fresh => {
+        if (!fresh) return;
+        const i = userReports.findIndex(x => String(x.id) === String(reportId));
+        if (i >= 0) userReports[i] = fresh;
+        if (String(currentDetailReportId) === String(reportId) &&
+            document.getElementById('screen-detail') &&
+            document.getElementById('screen-detail').classList.contains('active')) {
+          renderDetailContent(fresh);
+        }
+      })
       .catch(() => {});
   } else {
     showLoading(true);
     try {
       r = await db.getReportById(reportId);
       showLoading(false);
-      if (!r) { showToast('❌ Report not found'); return; }
-      renderDetail(r);
+      if (!r) { showToast('\u274C Report not found'); return; }
+      renderDetailContent(r);
       pushScreen('detail');
     } catch (err) {
       showLoading(false);
-      showToast('❌ ' + err.message);
+      showToast('\u274C ' + err.message);
     }
   }
 }
 
-function viewAttachment(url, type) {
-  const modal = document.getElementById('media-viewer');
-  const content = document.getElementById('media-viewer-content');
-  if (!modal || !content || !url) {
-    window.open(url, '_blank');
-    return;
-  }
-
-  if (type && String(type).startsWith('video/')) {
-    content.innerHTML = `<video controls autoplay playsinline src="${url}"></video>`;
-  } else {
-    content.innerHTML = `<img src="${url}" alt="Report attachment" onerror="window.open('${url}','_blank')">`;
-  }
-  modal.classList.add('show');
-}
-
-function closeMediaViewer(event) {
-  if (event) event.stopPropagation();
-  const modal = document.getElementById('media-viewer');
-  const content = document.getElementById('media-viewer-content');
-  if (!modal || !content) return;
-  modal.classList.remove('show');
-  content.innerHTML = '';
-}
-
-async function submitComment(reportId) {
-  const input = document.getElementById('comment-input');
-  const text = input?.value.trim();
-  if (!text) { showToast('❌ Type a comment'); return; }
-  if (!currentUser) { showToast('❌ Mag-login muna'); return; }
-  showLoading(true);
-  try {
-    await db.addComment(reportId, {
-      user_id: currentUser.id,
-      user_name: `${currentUserProfile?.first_name||'User'} ${currentUserProfile?.last_name||''}`.trim(),
-      text, is_admin: false,
-      created_at: new Date().toISOString(),
-    });
-    if (input) input.value = '';
-    showLoading(false);
-    showToast('✅ Comment added!');
-    const fresh = await db.getReportById(reportId);
-    if (fresh) { const i = userReports.findIndex(x=>String(x.id)===String(reportId)); if(i>=0) userReports[i]=fresh; renderDetail_wrapper(fresh); }
-  } catch (err) { showLoading(false); showToast('❌ ' + err.message); }
-}
-
+// ── Re-render detail in place without any screen navigation ──
 function renderDetail_wrapper(r) {
-  // Re-render without navigating
-  if (currentDetailReportId && document.getElementById('screen-detail').classList.contains('active')) {
-    openDetail(r.id);
-  }
+  if (!r) return;
+  if (String(currentDetailReportId) !== String(r.id)) return;
+  const screen = document.getElementById('screen-detail');
+  if (!screen || !screen.classList.contains('active')) return;
+  renderDetailContent(r);
 }
+
 
 async function upvoteReport(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna'); return; }
