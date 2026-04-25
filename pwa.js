@@ -265,12 +265,10 @@ const CACHE = {
   
   set(key, data) {
     this[key] = { data, timestamp: Date.now(), ttl: this[key].ttl };
-    console.log(`💾 Cached ${key}`, data);
   },
   
   get(key) {
     if (!this.isExpired(key)) {
-      console.log(`✨ Cache hit: ${key}`);
       return this[key].data;
     }
     return null;
@@ -281,7 +279,6 @@ const CACHE = {
     this.reports.timestamp = 0;
     this.profile.data = null;
     this.profile.timestamp = 0;
-    console.log('🗑️ Cache cleared');
   }
 };
 
@@ -295,16 +292,12 @@ function withTimeout(promise, ms, label = 'operation') {
 
 // ── INITIALIZATION ──
 document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚀 AKSYON PWA Initializing...');
 
-  // ALWAYS hide loading overlay on start
   showLoading(false);
 
-  // Failsafe: never let the overlay get "stuck" due to an uncaught error.
   window.addEventListener('error', () => showLoading(false));
   window.addEventListener('unhandledrejection', () => showLoading(false));
 
-  // Close scope dropdown when tapping outside of it
   document.addEventListener('click', (e) => {
     const dropdown = document.getElementById('scope-dropdown');
     const btn = document.getElementById('reports-title-btn');
@@ -316,30 +309,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   if (!window.supabaseClient) {
-    console.error('❌ Supabase client missing. Check CDN load + `pwa.js`.');
     showToast('❌ Supabase not loaded. Check internet/CDN and refresh.');
     showLoginScreen();
     return;
   }
 
-  // ── FIX: onAuthStateChange handles ALL cases (initial session restore + login/logout)
-  // We use it as the single source of truth instead of calling getSession + onAuthStateChange separately
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
-    console.log('🔔 Auth event:', event, '| User:', session?.user?.email || 'none');
-
-    if (isRegisteringFlow && event === 'SIGNED_IN') {
-      // During registration, we intentionally require manual login afterwards.
-      return;
-    }
+    if (isRegisteringFlow && event === 'SIGNED_IN') return;
 
     if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
       if (loginHandled && event === 'SIGNED_IN') {
-        // Avoid double-fire: INITIAL_SESSION already handled, ignore next SIGNED_IN
         loginHandled = false;
         return;
       }
-
-      // Account switch: clean up prior session state before initializing next user.
       if (currentUser?.id && currentUser.id !== session.user.id) {
         cleanupSessionState();
       }
@@ -367,11 +349,8 @@ function showLoginScreen() {
   screenStack = [];
 }
 
-// ── MODIFIED: handleUserLogin ──
 async function handleUserLogin(user) {
-  console.log('📝 Setting up session for:', user.email);
   currentUser = user;
-
   document.getElementById('screen-login').classList.add('hidden');
   document.getElementById('tab-shell').classList.add('active');
   document.getElementById('bottom-nav').classList.add('visible');
@@ -380,7 +359,6 @@ async function handleUserLogin(user) {
   showLoading(true);
   const loadingFailsafe = setTimeout(() => showLoading(false), 3500);
   try {
-    // Load BOTH in parallel (NO double-load of reports)
     const [profileRes, reportsRes] = await Promise.allSettled([
       withTimeout(loadUserProfile(), 8000, 'Load profile'),
       withTimeout(loadAllReports(FULL_REPORT_LIMIT), 7000, 'Load all reports'),
@@ -392,15 +370,9 @@ async function handleUserLogin(user) {
     setTimeout(requestGPSFromHome, 600);
 
     if (reportsRes.status === 'rejected') {
-      console.warn('⚠️ Reports load timed out; retrying in background.');
       loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
     }
-
-    if (profileRes.status === 'rejected') {
-      console.warn('⚠️ Initial profile load issue:', profileRes.reason);
-    }
   } catch (error) {
-    console.error('❌ Session setup error:', error);
     renderAll();
   } finally {
     clearTimeout(loadingFailsafe);
@@ -408,13 +380,11 @@ async function handleUserLogin(user) {
   }
 }
 
-// ── HANDLE LOGOUT ──
 function handleUserLogout() {
   cleanupSessionState();
   showLoginScreen();
 }
 
-// ── MODIFIED: cleanupSessionState ──
 function cleanupSessionState() {
   currentUser = null;
   currentUserProfile = null;
@@ -424,7 +394,7 @@ function cleanupSessionState() {
   isLoadingReports = false;
   currentDetailReportId = null;
   setReportsScope('mine');
-  CACHE.clear(); // ← Clear cache on logout
+  CACHE.clear(); 
 
   if (realtimeChannel) {
     supabaseClient.removeChannel(realtimeChannel).catch(() => {});
@@ -442,7 +412,6 @@ function doLogin() {
   supabaseClient.auth.signInWithPassword({ email, password })
     .then(({ error }) => {
       if (error) { showLoading(false); showToast('❌ ' + error.message); }
-      // On success, onAuthStateChange fires SIGNED_IN → handleUserLogin
     })
     .catch(err => { showLoading(false); showToast('❌ ' + err.message); });
 }
@@ -478,16 +447,13 @@ function doLogout() {
     .catch(err => { showLoading(false); showToast('❌ ' + err.message); });
 }
 
-// ── MODIFIED: loadUserProfile with caching ──
 async function loadUserProfile() {
   if (!currentUser) return;
-  
   const cached = CACHE.get('profile');
   if (cached) {
     currentUserProfile = cached;
     return;
   }
-  
   try {
     let profile = await db.getUserProfile(currentUser.id);
     if (!profile) {
@@ -506,7 +472,6 @@ async function loadUserProfile() {
     currentUserProfile = profile;
     CACHE.set('profile', profile);
   } catch (error) {
-    console.error('❌ Profile error:', error);
     currentUserProfile = {
       first_name: 'User', last_name: 'Profile',
       email: currentUser?.email || '',
@@ -515,7 +480,6 @@ async function loadUserProfile() {
   }
 }
 
-// ── MODIFIED: subscribeToReports (smarter) ──
 function subscribeToReports() {
   if (realtimeChannel) {
     supabaseClient.removeChannel(realtimeChannel).catch(() => {});
@@ -524,38 +488,28 @@ function subscribeToReports() {
   realtimeChannel = supabaseClient
     .channel('reports-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
-      // For UPDATE: patch in-place so there is no full reload / screen flicker
       if (payload.eventType === 'UPDATE' && payload.new) {
         const idx = userReports.findIndex(r => String(r.id) === String(payload.new.id));
         if (idx >= 0) {
           userReports[idx] = payload.new;
           CACHE.set('reports', userReports);
-          
-          // Only re-render the detail screen if the user is currently looking at THIS exact report
+          renderAll();
           if (String(currentDetailReportId) === String(payload.new.id) &&
-              document.getElementById('screen-detail')?.classList.contains('active')) {
+              document.getElementById('screen-detail') &&
+              document.getElementById('screen-detail').classList.contains('active')) {
             renderDetailContent(payload.new);
-          } else {
-             // Silently update the main feed without causing a jarring screen flash
-             renderHome();
-             renderReports();
-             if (document.getElementById('screen-aktibidad')?.classList.contains('active')) renderAkt();
           }
+          return;
         }
-      } else {
-        // INSERT or DELETE (or unknown record) — full reload
-        CACHE.reports.timestamp = 0;
-        loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
       }
+      CACHE.reports.timestamp = 0;
+      loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
     })
     .subscribe();
 }
 
-// ── MODIFIED: loadAllReports with caching ──
 async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
   const force = !!options.force;
-  
-  // Try cache first (unless forced refresh or realtime update)
   if (!force) {
     const cached = CACHE.get('reports');
     if (cached && cached.length > 0) {
@@ -569,7 +523,6 @@ async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
   isLoadingReports = true;
   try {
     userReports = await db.getReports(limit);
-    console.log('✅ Loaded', userReports.length, 'reports (limit:', limit + ')');
     CACHE.set('reports', userReports);
     renderAll();
     if (currentDetailReportId && document.getElementById('screen-detail') &&
@@ -578,11 +531,10 @@ async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
         if (!fresh) return;
         const idx = userReports.findIndex(x => String(x.id) === String(currentDetailReportId));
         if (idx >= 0) userReports[idx] = fresh;
-        renderDetailContent(fresh); // Re-render status/comments in place — no screen push
+        renderDetailContent(fresh);
       }).catch(() => {});
     }
   } catch (error) {
-    console.error('❌ Error loading reports:', error);
     if (userReports.length === 0) {
       const empty = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Hindi ma-load ang mga report.<br>I-check ang iyong koneksyon.</div>';
       ['nearby-list','resolved-list','reports-list'].forEach(id => {
@@ -628,7 +580,6 @@ async function submitReport() {
       try {
         attachments.push(await db.uploadFile(file));
       } catch (err) {
-        console.error('File upload error:', err);
         showToast('⚠️ Hindi na-upload: ' + file.name);
       }
     }
@@ -664,7 +615,6 @@ async function submitReport() {
   } catch (error) {
     showLoading(false);
     submitBtn.disabled = false;
-    console.error('Submit error:', error);
     showToast('❌ ' + (error.message || 'Submit failed'));
   }
 }
@@ -677,7 +627,7 @@ function handlePhotoUpload(event) {
   if (remaining <= 0) { showToast('❌ Max 4 files na'); return; }
   let added = 0;
   for (const file of files.slice(0, remaining)) {
-    if (file.size > 50 * 1024 * 1024) { showToast(`❌ ${file.name} too large (max 50MB)`); continue; }
+    if (file.size > 50 * 1024 * 1024) { showToast(`❌ ${file.name} too large`); continue; }
     selectedFiles.push(file); added++;
   }
   renderPhotoPreviews();
@@ -837,7 +787,6 @@ function renderReports() {
   }).join('');
 }
 
-// ── SCOPE DROPDOWN ──
 function toggleScopeDropdown() {
   const menu = document.getElementById('scope-dropdown');
   const btn  = document.getElementById('reports-title-btn');
@@ -866,12 +815,10 @@ function selectScope(scope) {
 
 function setReportsScope(scope) {
   reportsScope = scope === 'community' ? 'community' : 'mine';
-  // Update dropdown option active states
   ['mine','community'].forEach(s => {
     const el = document.getElementById('scope-opt-' + s);
     if (el) el.classList.toggle('active', s === reportsScope);
   });
-  // Update title text
   const title = document.getElementById('reports-tab-title');
   if (title) title.textContent = reportsScope === 'community' ? '🌐 Community Reports' : '📋 Mga Report Ko';
 }
@@ -949,7 +896,7 @@ function renderProfileStats() {
   set('ps-pending', mine.filter(r => r.status==='pending').length);
 }
 
-// ── DETAIL CONTENT RENDERER (pure — no screen-push side-effects) ─────────
+// ── DETAIL CONTENT RENDERER ─────────
 function renderDetailContent(r) {
   if (!r) return;
   document.getElementById('detail-header-title').textContent = r.category || 'Report';
@@ -1081,6 +1028,127 @@ function renderDetailContent(r) {
   }));
 }
 
+// ── NEW: SYSTEM NAVIGATION AND HISTORY API ──
+window.addEventListener('popstate', (e) => {
+  // 1. Close media viewer if it's open
+  const viewer = document.getElementById('media-viewer');
+  if (viewer && viewer.classList.contains('show')) {
+     viewer.classList.remove('show');
+     const content = document.getElementById('media-viewer-content');
+     if (content) content.innerHTML = '';
+     return;
+  }
+
+  // 2. Pop screens if there are any in the stack
+  if (screenStack.length > 0) {
+    const _pname = screenStack.pop();
+    const s = document.getElementById('screen-' + _pname);
+    if (s) s.classList.remove('active');
+
+    if (_pname === 'detail' && window._detailMap) {
+      try { window._detailMap.remove(); } catch(err) {}
+      window._detailMap = null;
+    }
+  }
+});
+
+function pushScreen(name) {
+  const s = document.getElementById('screen-'+name);
+  if (!s) return;
+  screenStack.push(name);
+  
+  // Push to browser history to support Android "Swipe Back" gesture
+  history.pushState({ screen: name }, '', `#${name}`);
+
+  requestAnimationFrame(() => s.classList.add('active'));
+  if (name==='aktibidad') setTimeout(renderAkt, 50);
+  if (name==='submit') {
+    selectedFiles=[]; document.getElementById('photo-previews').innerHTML='';
+    document.getElementById('f-title').value=''; document.getElementById('f-detail').value='';
+    setTimeout(() => {
+      initMap();
+      prefillSubmitAddressFromHome();
+      setTimeout(requestGPS, 350);
+    }, 80);
+  }
+  if (name==='editprofile') updateProfileUI();
+}
+
+function popScreen() {
+  if (screenStack.length > 0) {
+    // Triggers window popstate listener automatically
+    history.back();
+  }
+}
+
+// ── NEW: IMAGE/VIDEO ATTACHMENT VIEWER ──
+function viewAttachment(url, type) {
+  const viewer = document.getElementById('media-viewer');
+  const content = document.getElementById('media-viewer-content');
+  if (!viewer || !content || !url) return;
+  
+  const isVid = String(type || '').startsWith('video/');
+  content.innerHTML = isVid
+    ? `<video controls autoplay playsinline src="${url}" style="max-width:100%;max-height:84vh;border-radius:12px;background:#111;"></video>`
+    : `<img src="${url}" alt="Attachment" style="max-width:100%;max-height:84vh;border-radius:12px;background:#111;" onerror="window.open('${url}','_blank')">`;
+
+  viewer.classList.add('show');
+  
+  // Push to history so swiping back closes the image instead of exiting the report!
+  history.pushState({ modal: 'media' }, '', '#media');
+}
+
+function closeMediaViewer(e) {
+  if (e) e.stopPropagation();
+  const viewer = document.getElementById('media-viewer');
+  if (viewer && viewer.classList.contains('show')) {
+     // Trigger popstate listener
+     history.back();
+  }
+}
+
+// ── NEW: ADD USER COMMENT ──
+async function submitComment(reportId) {
+  if (!currentUser) { showToast('❌ Mag-login muna para mag-comment'); return; }
+
+  const inputEl = document.getElementById('comment-input');
+  if (!inputEl) return;
+  const text = inputEl.value.trim();
+
+  if (!text) { showToast('⚠️ Walang naisulat na komento'); return; }
+
+  const newComment = {
+    user_id: currentUser.id,
+    user_name: `${currentUserProfile?.first_name || 'User'} ${currentUserProfile?.last_name || ''}`.trim(),
+    text: text,
+    is_admin: false,
+    created_at: new Date().toISOString()
+  };
+
+  inputEl.disabled = true;
+  showLoading(true);
+
+  try {
+    const updatedReport = await db.addComment(reportId, newComment);
+
+    const idx = userReports.findIndex(r => String(r.id) === String(reportId));
+    if (idx >= 0) userReports[idx] = updatedReport;
+    CACHE.set('reports', userReports);
+
+    if (String(currentDetailReportId) === String(reportId)) {
+      renderDetailContent(updatedReport);
+    }
+
+    showToast('✅ Naipadala ang komento!');
+  } catch (err) {
+    console.error(err);
+    showToast('❌ Nabigong ipadala: ' + err.message);
+  } finally {
+    inputEl.disabled = false;
+    showLoading(false);
+  }
+}
+
 // ── DETAIL ──
 async function openDetail(reportId) {
   currentDetailReportId = reportId;
@@ -1089,7 +1157,6 @@ async function openDetail(reportId) {
   if (r) {
     renderDetailContent(r);
     pushScreen('detail');
-    // Silently refresh in background for latest status/comments
     db.getReportById(reportId)
       .then(fresh => {
         if (!fresh) return;
@@ -1117,7 +1184,6 @@ async function openDetail(reportId) {
   }
 }
 
-// ── Re-render detail in place without any screen navigation ──
 function renderDetail_wrapper(r) {
   if (!r) return;
   if (String(currentDetailReportId) !== String(r.id)) return;
@@ -1157,36 +1223,6 @@ function switchTab(tab) {
   });
   if (tab==='reports') renderReports();
   if (tab==='profile') renderProfileStats();
-}
-
-// ── PUSH/POP SCREENS ──
-function pushScreen(name) {
-  const s = document.getElementById('screen-'+name);
-  if (!s) return;
-  screenStack.push(name);
-  requestAnimationFrame(() => s.classList.add('active'));
-  if (name==='aktibidad') setTimeout(renderAkt, 50);
-  if (name==='submit') {
-    selectedFiles=[]; document.getElementById('photo-previews').innerHTML='';
-    document.getElementById('f-title').value=''; document.getElementById('f-detail').value='';
-    setTimeout(() => {
-      initMap();
-      prefillSubmitAddressFromHome();
-      // Auto-locate on opening the report form for better UX.
-      setTimeout(requestGPS, 350);
-    }, 80);
-  }
-  if (name==='editprofile') updateProfileUI();
-}
-
-function popScreen() {
-  if (!screenStack.length) return;
-  const _pname = screenStack.pop();
-  document.getElementById('screen-' + _pname)?.classList.remove('active');
-  if (_pname === 'detail' && window._detailMap) {
-    try { window._detailMap.remove(); } catch(e) {}
-    window._detailMap = null;
-  }
 }
 
 // ── PROFILE ──
@@ -1346,7 +1382,6 @@ function showToast(msg) {
 function showLoading(show) {
   const overlay=document.getElementById('loading-overlay');
   if(!overlay) return;
-  // ── FIX: use a counter so nested show/hide calls don't get stuck
   if(show) overlay.classList.add('show');
   else overlay.classList.remove('show');
 }
@@ -1358,7 +1393,6 @@ function showSignupScreen(show) {
   if (!el) return;
   if (show) {
     el.classList.add('visible');
-    // Small delay so CSS transition can trigger
     requestAnimationFrame(() => {
       const fn = document.getElementById('su-firstname');
       if (fn) fn.focus();
@@ -1436,8 +1470,6 @@ async function doRegister() {
         console.warn('Profile save warning:', profileErr.message);
       }
 
-      // Force a clean post-registration flow:
-      // user must manually log in from the login screen with same credentials.
       if (data?.session) {
         try { await supabaseClient.auth.signOut(); } catch {}
       }
