@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aksyon-v1';
+const CACHE_NAME = 'aksyon-v2';
 const urlsToCache = [
   './',
   './index.html',
