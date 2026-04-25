@@ -247,8 +247,8 @@ let homeLocationInitialized = false;
 let selectedFiles = [];
 let realtimeChannel = null;
 let currentDetailReportId = null;
-let isLoadingReports = false; // guard against parallel loads
-let loginHandled = false;     // prevent double-fire on reload
+let isLoadingReports = false; 
+let loginHandled = false;     
 let isRegisteringFlow = false;
 let activeAuthUserId = null;
 const FAST_START_REPORT_LIMIT = 20;
@@ -256,8 +256,8 @@ const FULL_REPORT_LIMIT = 100;
 
 // ── CACHE LAYER ──
 const CACHE = {
-  reports: { data: [], timestamp: 0, ttl: 300000 }, // 5 min cache
-  profile: { data: null, timestamp: 0, ttl: 600000 }, // 10 min cache
+  reports: { data: [], timestamp: 0, ttl: 300000 }, 
+  profile: { data: null, timestamp: 0, ttl: 600000 }, 
   
   isExpired(key) {
     return Date.now() - this[key].timestamp > this[key].ttl;
@@ -294,6 +294,13 @@ function withTimeout(promise, ms, label = 'operation') {
 document.addEventListener('DOMContentLoaded', () => {
 
   showLoading(false);
+
+  // FIX: Clear hash on reload so history back button works smoothly
+  if (window.location.hash) {
+    history.replaceState({ root: true }, '', window.location.pathname);
+  } else if (!history.state) {
+    history.replaceState({ root: true }, '', window.location.pathname);
+  }
 
   window.addEventListener('error', () => showLoading(false));
   window.addEventListener('unhandledrejection', () => showLoading(false));
@@ -1028,9 +1035,8 @@ function renderDetailContent(r) {
   }));
 }
 
-// ── NEW: SYSTEM NAVIGATION AND HISTORY API ──
+// ── SYSTEM NAVIGATION AND HISTORY API (GESTURES & RELOAD FIX) ──
 window.addEventListener('popstate', (e) => {
-  // 1. Close media viewer if it's open
   const viewer = document.getElementById('media-viewer');
   if (viewer && viewer.classList.contains('show')) {
      viewer.classList.remove('show');
@@ -1039,7 +1045,6 @@ window.addEventListener('popstate', (e) => {
      return;
   }
 
-  // 2. Pop screens if there are any in the stack
   if (screenStack.length > 0) {
     const _pname = screenStack.pop();
     const s = document.getElementById('screen-' + _pname);
@@ -1049,6 +1054,8 @@ window.addEventListener('popstate', (e) => {
       try { window._detailMap.remove(); } catch(err) {}
       window._detailMap = null;
     }
+  } else {
+     document.querySelectorAll('.screen.active').forEach(s => s.classList.remove('active'));
   }
 });
 
@@ -1057,8 +1064,8 @@ function pushScreen(name) {
   if (!s) return;
   screenStack.push(name);
   
-  // Push to browser history to support Android "Swipe Back" gesture
-  history.pushState({ screen: name }, '', `#${name}`);
+  // Hash with timestamp to ensure a unique browser history entry even on same page
+  history.pushState({ screen: name }, '', `#${name}-${Date.now()}`);
 
   requestAnimationFrame(() => s.classList.add('active'));
   if (name==='aktibidad') setTimeout(renderAkt, 50);
@@ -1076,12 +1083,16 @@ function pushScreen(name) {
 
 function popScreen() {
   if (screenStack.length > 0) {
-    // Triggers window popstate listener automatically
+    // Calling history.back() triggers popstate, smoothly handling the closing animation
     history.back();
+  } else {
+    // Failsafe fallback
+    document.querySelectorAll('.screen.active').forEach(s => s.classList.remove('active'));
+    history.replaceState({ root: true }, '', window.location.pathname);
   }
 }
 
-// ── NEW: IMAGE/VIDEO ATTACHMENT VIEWER ──
+// ── IMAGE/VIDEO ATTACHMENT VIEWER ──
 function viewAttachment(url, type) {
   const viewer = document.getElementById('media-viewer');
   const content = document.getElementById('media-viewer-content');
@@ -1094,20 +1105,18 @@ function viewAttachment(url, type) {
 
   viewer.classList.add('show');
   
-  // Push to history so swiping back closes the image instead of exiting the report!
-  history.pushState({ modal: 'media' }, '', '#media');
+  history.pushState({ modal: 'media' }, '', `#media-${Date.now()}`);
 }
 
 function closeMediaViewer(e) {
   if (e) e.stopPropagation();
   const viewer = document.getElementById('media-viewer');
   if (viewer && viewer.classList.contains('show')) {
-     // Trigger popstate listener
      history.back();
   }
 }
 
-// ── NEW: ADD USER COMMENT ──
+// ── ADD USER COMMENT ──
 async function submitComment(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna para mag-comment'); return; }
 
