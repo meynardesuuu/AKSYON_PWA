@@ -530,18 +530,23 @@ function subscribeToReports() {
         if (idx >= 0) {
           userReports[idx] = payload.new;
           CACHE.set('reports', userReports);
-          renderAll();
+          
+          // Only re-render the detail screen if the user is currently looking at THIS exact report
           if (String(currentDetailReportId) === String(payload.new.id) &&
-              document.getElementById('screen-detail') &&
-              document.getElementById('screen-detail').classList.contains('active')) {
+              document.getElementById('screen-detail')?.classList.contains('active')) {
             renderDetailContent(payload.new);
+          } else {
+             // Silently update the main feed without causing a jarring screen flash
+             renderHome();
+             renderReports();
+             if (document.getElementById('screen-aktibidad')?.classList.contains('active')) renderAkt();
           }
-          return;
         }
+      } else {
+        // INSERT or DELETE (or unknown record) — full reload
+        CACHE.reports.timestamp = 0;
+        loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
       }
-      // INSERT or DELETE (or unknown record) — full reload
-      CACHE.reports.timestamp = 0;
-      loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
     })
     .subscribe();
 }
@@ -1456,4 +1461,3 @@ async function doRegister() {
     btn.textContent = 'MAGREGISTER';
   }
 }
-
