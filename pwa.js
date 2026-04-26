@@ -295,7 +295,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   showLoading(false);
 
-  // FIX: Clear hash on reload so history back button works smoothly
+  // INJECT CSS FIX: Guarantee top-bar and back button are NEVER covered up by UI elements
+  const style = document.createElement('style');
+  style.innerHTML = `
+    .top-bar { z-index: 9999 !important; position: relative !important; pointer-events: all !important; }
+    #toast { z-index: 10000 !important; pointer-events: none !important; }
+    #loading-overlay { z-index: 10000 !important; }
+  `;
+  document.head.appendChild(style);
+
   if (window.location.hash) {
     history.replaceState({ root: true }, '', window.location.pathname);
   } else if (!history.state) {
@@ -504,7 +512,13 @@ function subscribeToReports() {
           if (String(currentDetailReportId) === String(payload.new.id) &&
               document.getElementById('screen-detail') &&
               document.getElementById('screen-detail').classList.contains('active')) {
+            
+            // Fix layout jump during live updates
+            const scrollBox = document.getElementById('detail-content');
+            const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
             renderDetailContent(payload.new);
+            setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
+            
           }
           return;
         }
@@ -538,7 +552,12 @@ async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
         if (!fresh) return;
         const idx = userReports.findIndex(x => String(x.id) === String(currentDetailReportId));
         if (idx >= 0) userReports[idx] = fresh;
+        
+        const scrollBox = document.getElementById('detail-content');
+        const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
         renderDetailContent(fresh);
+        setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
+
       }).catch(() => {});
     }
   } catch (error) {
@@ -995,9 +1014,12 @@ function renderDetailContent(r) {
     <div class="detail-comment-box">${commentsHTML}</div>
     <div style="padding:12px;">
       <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F5F5F7;">
+        
         <input type="text" id="comment-input" placeholder="Mag-comment..."
-          style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;">
-        <button onclick="submitComment('${r.id}')"
+          style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();submitComment('${r.id}');}">
+          
+        <button type="button" onclick="submitComment('${r.id}')"
           style="background:#8B1A1A;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send</button>
       </div>
     </div>
@@ -1064,7 +1086,6 @@ function pushScreen(name) {
   if (!s) return;
   screenStack.push(name);
   
-  // Hash with timestamp to ensure a unique browser history entry even on same page
   history.pushState({ screen: name }, '', `#${name}-${Date.now()}`);
 
   requestAnimationFrame(() => s.classList.add('active'));
@@ -1081,14 +1102,28 @@ function pushScreen(name) {
   if (name==='editprofile') updateProfileUI();
 }
 
+// FIX: Bulletproof Back Button Logic
 function popScreen() {
   if (screenStack.length > 0) {
-    // Calling history.back() triggers popstate, smoothly handling the closing animation
-    history.back();
+    // If history is intact, go back natively to trigger popstate
+    if (window.history.state && window.history.state.screen) {
+      history.back();
+    } else {
+      // If history is broken (due to external reload/bug), manually close the screen
+      const _pname = screenStack.pop();
+      const s = document.getElementById('screen-' + _pname);
+      if (s) s.classList.remove('active');
+
+      if (_pname === 'detail' && window._detailMap) {
+        try { window._detailMap.remove(); } catch(err) {}
+        window._detailMap = null;
+      }
+      try { history.replaceState({ root: true }, '', window.location.pathname); } catch(e) {}
+    }
   } else {
-    // Failsafe fallback
+    // Failsafe
     document.querySelectorAll('.screen.active').forEach(s => s.classList.remove('active'));
-    history.replaceState({ root: true }, '', window.location.pathname);
+    try { history.replaceState({ root: true }, '', window.location.pathname); } catch(e) {}
   }
 }
 
@@ -1116,7 +1151,7 @@ function closeMediaViewer(e) {
   }
 }
 
-// ── ADD USER COMMENT ──
+// ── ADD USER COMMENT (FIXED LAYOUT JUMPING) ──
 async function submitComment(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna para mag-comment'); return; }
 
@@ -1145,7 +1180,16 @@ async function submitComment(reportId) {
     CACHE.set('reports', userReports);
 
     if (String(currentDetailReportId) === String(reportId)) {
+      // Fix: Preserve scroll position so it doesn't jump back to top!
+      const scrollBox = document.getElementById('detail-content');
+      const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
+      
       renderDetailContent(updatedReport);
+      
+      setTimeout(() => {
+        const newScrollBox = document.getElementById('detail-content');
+        if(newScrollBox) newScrollBox.scrollTop = scrollPos;
+      }, 10);
     }
 
     showToast('✅ Naipadala ang komento!');
@@ -1153,7 +1197,8 @@ async function submitComment(reportId) {
     console.error(err);
     showToast('❌ Nabigong ipadala: ' + err.message);
   } finally {
-    inputEl.disabled = false;
+    const refreshedInput = document.getElementById('comment-input');
+    if (refreshedInput) refreshedInput.disabled = false;
     showLoading(false);
   }
 }
@@ -1174,7 +1219,11 @@ async function openDetail(reportId) {
         if (String(currentDetailReportId) === String(reportId) &&
             document.getElementById('screen-detail') &&
             document.getElementById('screen-detail').classList.contains('active')) {
+          
+          const scrollBox = document.getElementById('detail-content');
+          const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
           renderDetailContent(fresh);
+          setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
         }
       })
       .catch(() => {});
@@ -1198,9 +1247,12 @@ function renderDetail_wrapper(r) {
   if (String(currentDetailReportId) !== String(r.id)) return;
   const screen = document.getElementById('screen-detail');
   if (!screen || !screen.classList.contains('active')) return;
+  
+  const scrollBox = document.getElementById('detail-content');
+  const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
   renderDetailContent(r);
+  setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
 }
-
 
 async function upvoteReport(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna'); return; }
@@ -1212,7 +1264,9 @@ async function upvoteReport(reportId) {
     showLoading(false);
     showToast('✅ Vote updated!');
     renderAll();
-    if (String(currentDetailReportId)===String(reportId)) openDetail(reportId);
+    
+    // Fixed: Uses renderDetail_wrapper instead of openDetail to avoid breaking the Back button
+    if (String(currentDetailReportId)===String(reportId)) renderDetail_wrapper(updated);
   } catch (err) { showLoading(false); showToast('❌ ' + err.message); }
 }
 
