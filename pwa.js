@@ -326,6 +326,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
   });
+  
+  // ── NEW: AUTO-RELOAD ON SCROLL BOTTOM ──
+  document.querySelectorAll('.scroll-area').forEach(scrollBox => {
+    scrollBox.addEventListener('scroll', () => {
+      const isFeed = scrollBox.closest('#tab-home') || scrollBox.closest('#tab-reports') || scrollBox.id === 'akt-list';
+      if (isFeed && !isLoadingReports) {
+        // If user scrolled to the very bottom (with a 20px buffer)
+        if (Math.ceil(scrollBox.scrollTop + scrollBox.clientHeight) >= scrollBox.scrollHeight - 20) {
+          showToast('🔄 Nag-uupdate ng reports...');
+          loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(()=>{});
+        }
+      }
+    });
+  });
 
   if (!window.supabaseClient) {
     showToast('❌ Supabase not loaded. Check internet/CDN and refresh.');
@@ -1023,7 +1037,7 @@ function renderDetailContent(r) {
           style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;"
           onkeydown="if(event.key==='Enter'){event.preventDefault();submitComment('${r.id}');}">
           
-        <button type="button" onclick="submitComment('${r.id}')"
+        <button type="button" id="comment-btn-submit" onclick="submitComment('${r.id}')"
           style="background:#8B1A1A;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send</button>
       </div>
     </div>
@@ -1156,11 +1170,12 @@ function closeMediaViewer(e) {
   }
 }
 
-// ── ADD USER COMMENT (FIXED LAYOUT JUMPING) ──
+// ── ADD USER COMMENT (FADED SCREEN REMOVED) ──
 async function submitComment(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna para mag-comment'); return; }
 
   const inputEl = document.getElementById('comment-input');
+  const btnEl = document.getElementById('comment-btn-submit');
   if (!inputEl) return;
   const text = inputEl.value.trim();
 
@@ -1175,7 +1190,7 @@ async function submitComment(reportId) {
   };
 
   inputEl.disabled = true;
-  showLoading(true);
+  if (btnEl) btnEl.textContent = '...'; // Visual cue for loading without fading screen
 
   try {
     const updatedReport = await db.addComment(reportId, newComment);
@@ -1197,14 +1212,16 @@ async function submitComment(reportId) {
       }, 10);
     }
 
-    showToast('✅ Naipadala ang komento!');
   } catch (err) {
     console.error(err);
     showToast('❌ Nabigong ipadala: ' + err.message);
   } finally {
     const refreshedInput = document.getElementById('comment-input');
-    if (refreshedInput) refreshedInput.disabled = false;
-    showLoading(false);
+    const refreshedBtn = document.getElementById('comment-btn-submit');
+    if (refreshedInput) {
+       refreshedInput.disabled = false;
+       if(refreshedBtn) refreshedBtn.textContent = 'Send';
+    }
   }
 }
 
@@ -1261,18 +1278,19 @@ function renderDetail_wrapper(r) {
 
 async function upvoteReport(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna'); return; }
-  showLoading(true);
+  
   try {
     const updated = await db.upvoteReport(reportId, currentUser.id);
     const i = userReports.findIndex(x=>String(x.id)===String(reportId));
     if (i>=0) userReports[i] = updated;
-    showLoading(false);
-    showToast('✅ Vote updated!');
+    
     renderAll();
     
     // Fixed: Uses renderDetail_wrapper instead of openDetail to avoid breaking the Back button
     if (String(currentDetailReportId)===String(reportId)) renderDetail_wrapper(updated);
-  } catch (err) { showLoading(false); showToast('❌ ' + err.message); }
+  } catch (err) {  
+    showToast('❌ ' + err.message); 
+  }
 }
 
 function shareReport() {
