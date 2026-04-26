@@ -101,7 +101,7 @@ const db = {
       .from('reports')
       .insert([reportData])
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
     return data;
   },
@@ -112,7 +112,7 @@ const db = {
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
     return data;
   },
@@ -133,8 +133,10 @@ const db = {
       .update({ comments, updated_at: new Date().toISOString() })
       .eq('id', reportId)
       .select()
-      .single();
+      .maybeSingle(); 
+      
     if (error) throw error;
+    if (!data) throw new Error("Update blocked by Supabase Security (RLS). Please run the SQL fix.");
     return data;
   },
 
@@ -158,8 +160,10 @@ const db = {
       .update({ upvotes: newCount, upvoted_by: newUpvotedBy, updated_at: new Date().toISOString() })
       .eq('id', reportId)
       .select()
-      .single();
+      .maybeSingle();
+
     if (error) throw error;
+    if (!data) throw new Error("Update blocked by Supabase Security (RLS). Please run the SQL fix.");
     return data;
   },
 
@@ -212,7 +216,7 @@ const db = {
       .upsert({ id: userId, ...profileData, updated_at: new Date().toISOString() },
                { onConflict: 'id' })
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
     return data;
   },
@@ -1086,6 +1090,7 @@ function pushScreen(name) {
   if (!s) return;
   screenStack.push(name);
   
+  // Hash with timestamp to ensure a unique browser history entry even on same page
   history.pushState({ screen: name }, '', `#${name}-${Date.now()}`);
 
   requestAnimationFrame(() => s.classList.add('active'));
