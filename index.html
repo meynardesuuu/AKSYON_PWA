@@ -44,13 +44,15 @@
       <span class="field-icon">🔒</span>
       <input type="password" id="login-password" placeholder="Password">
     </div>
+    
     <div class="login-meta">
       <span class="link-text" onclick="showToast('Password reset coming soon')">Nakalimutan ang password?</span>
-    <button class="btn-full" onclick="doLogin()">MAG-LOGIN</button>
-      <div class="divider"><span>o</span></div>
+    </div> <button class="btn-full" onclick="doLogin()">MAG-LOGIN</button>
     
-    <button class="btn-social" onclick="showSignupScreen(true)" style="width: 100%;">
-      <span style="font-weight:700;color:#8B1A1A">+</span> Gumawa ng Bagong Account
+    <div class="divider"><span>o</span></div>
+    
+    <button class="btn-full" onclick="showSignupScreen(true)" style="background: transparent; color: #8B1A1A; border: 2px solid #8B1A1A;">
+      GUMAWA NG ACCOUNT
     </button>
   </div>
 </div>
@@ -126,6 +128,22 @@
       </div>
     </div>
     <div class="scroll-area" id="home-scroll">
+      
+      <div id="install-prompt" class="install-prompt">
+        <div class="install-content">
+          <div class="install-icon-box">
+            <img src="icon/icon-192.png" alt="Aksyon Icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <span style="display:none; font-size: 28px;">📱</span>
+          </div>
+          <div class="install-text">
+            <strong>I-install ang AKSYON!</strong>
+            <span>I-add sa home screen para mas mabilis ma-access.</span>
+          </div>
+          <button id="btn-install" class="btn-install">Install</button>
+          <button id="btn-close-install" class="btn-close-install">✕</button>
+        </div>
+      </div>
+      
       <div class="section-header">
         <div class="section-title"><span class="section-dot"></span> Mga Ulat Nearby</div>
       </div>
