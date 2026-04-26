@@ -64,6 +64,7 @@ const supabaseClient = createClient
         autoRefreshToken: true,
         detectSessionInUrl: true,
         storage: safeStorage,
+        storageKey: 'aksyon-pwa-auth', 
       },
       realtime: {
         params: { eventsPerSecond: 10 },
