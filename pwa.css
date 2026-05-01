@@ -103,7 +103,14 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
 .chip.pending{background:#FFF8E1;color:#E65100;}
 .chip.inreview{background:#E3F2FD;color:#1565C0;}
 .chip.resolved{background:#E8F5E9;color:#2E7D32;}
-.chip.urgent{background:#FFEBEE;color:#C62828;}
+
+.chip.inprogress { background: #FFF3E0; color: #E65100; }
+.chip.forwarded { background: #F3E5F5; color: #7B1FA2; }
+.chip.false { background: #FFEBEE; color: #C62828; }
+
+/* Para naman ito sa progress bar sa loob ng mismong detalye ng report */
+.progress-fill.orange { background: #E65100; }
+.progress-fill.purple { background: #7B1FA2; }
 
 /* ── BUTTONS ── */
 .btn-full{width:100%;background:#8B1A1A;color:#fff;border:none;border-radius:14px;padding:17px;font-size:15px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:0.8px;transition:background 0.15s,transform 0.1s;}
