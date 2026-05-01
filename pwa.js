@@ -716,10 +716,24 @@ function renderAll() {
 function chipLabel(s) {
   return {
     pending: '⏳ Pending',
-    inreview: '🔎 Reviewed',
+    inreview: '👀 Acknowledged',
+    inprogress: '🚧 In Progress',
+    forwarded: '🏢 Forwarded',
     resolved: '✅ Resolved',
     false: '🚩 False Report',
   }[s] || s;
+}
+
+function stepFromStatus(s) { 
+  return { pending:1, inreview:2, inprogress:2, forwarded:2, resolved:3, false:2 }[s] || 1; 
+}
+
+function progressFromStatus(s) { 
+  return { pending:24, inreview:50, inprogress:75, forwarded:75, resolved:100, false:50 }[s] || 24; 
+}
+
+function pcolorFromStatus(s) { 
+  return { pending:'yellow', inreview:'blue', inprogress:'orange', forwarded:'purple', resolved:'green', false:'red' }[s] || 'yellow'; 
 }
 
 function getTimeAgo(dateString) {
@@ -736,10 +750,6 @@ function getTimeAgo(dateString) {
 function getIconForCategory(cat) {
   return { Ilaw: '💡', Kalsada: '🚧', Basura: '🗑️', Tubig: '💧', Baha: '🌊', 'Iba pa': '📌' }[cat] || '📌';
 }
-
-function stepFromStatus(s) { return { pending:1, inreview:2, resolved:3, false:2 }[s] || 1; }
-function progressFromStatus(s) { return { pending:24, inreview:62, resolved:100, false:62 }[s] || 24; }
-function pcolorFromStatus(s) { return { pending:'yellow', inreview:'blue', resolved:'green', false:'blue' }[s] || 'yellow'; }
 
 function escHtml(str) {
   if (!str) return '';
