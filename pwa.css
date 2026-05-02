@@ -53,14 +53,15 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
   background:#F2F2F7;
   transform:translateX(100%);
   transition:transform 0.26s cubic-bezier(0.4,0,0.2,1);
-  will-change:transform;z-index:10;
+  will-change:transform;
+  z-index:10000; /* FIX: Guarantee screens stay above tabs */
   -webkit-backface-visibility:hidden;backface-visibility:hidden;
 }
-.screen.active{transform:translateX(0);}
+.screen.active{transform:translateX(0); z-index:10005;}
 
 /* ── LOADING OVERLAY ── */
 .loading-overlay{
-  position:fixed;inset:0;z-index:9998;
+  position:fixed;inset:0;z-index:20000 !important;
   background:rgba(0,0,0,0.45);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity 0.2s;
@@ -74,7 +75,8 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
 .top-bar{
   background:#8B1A1A;padding:10px 16px 14px;color:#fff;
   display:flex;align-items:center;gap:12px;flex-shrink:0;
-  /* box-shadow:0 2px 8px rgba(0,0,0,0.2); */
+  z-index: 9999;
+  position: relative;
 }
 .top-bar h2{font-size:18px;font-weight:600;flex:1;letter-spacing:-0.2px;}
 .back-btn{width:34px;height:34px;background:rgba(255,255,255,0.15);border-radius:50%;border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
@@ -103,14 +105,9 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
 .chip.pending{background:#FFF8E1;color:#E65100;}
 .chip.inreview{background:#E3F2FD;color:#1565C0;}
 .chip.resolved{background:#E8F5E9;color:#2E7D32;}
-
 .chip.inprogress { background: #FFF3E0; color: #E65100; }
 .chip.forwarded { background: #F3E5F5; color: #7B1FA2; }
 .chip.false { background: #FFEBEE; color: #C62828; }
-
-/* Para naman ito sa progress bar sa loob ng mismong detalye ng report */
-.progress-fill.orange { background: #E65100; }
-.progress-fill.purple { background: #7B1FA2; }
 
 /* ── BUTTONS ── */
 .btn-full{width:100%;background:#8B1A1A;color:#fff;border:none;border-radius:14px;padding:17px;font-size:15px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;letter-spacing:0.8px;transition:background 0.15s,transform 0.1s;}
@@ -174,13 +171,9 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
 .fab:active{opacity:0.9;}
 
 /* ══ REPORTS ══ */
-/* The top-bar is a normal flex row — no special stacking needed.
-   The dropdown escapes it via fixed positioning so it never
-   clips the filter-bar or any sibling element below. */
 .reports-top-bar{
   position:relative;
   overflow:visible !important;
-  /* Do NOT set z-index here — let normal document order handle it */
 }
 .reports-title-btn{
   display:flex;align-items:center;gap:6px;
@@ -194,11 +187,8 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
   transition:transform 0.2s;display:inline-block;margin-top:1px;
 }
 .reports-title-btn[aria-expanded="true"] .dropdown-caret{transform:rotate(180deg);}
-/* Dropdown uses fixed positioning so it floats above everything
-   without affecting the layout flow or clipping siblings */
 .scope-dropdown{
   position: fixed;
-  /* Center horizontally relative to the button */
   margin-top: 8px;
   top: 56px;
   left: 50%;
@@ -241,7 +231,7 @@ body{height:100%;height:100dvh;overflow:hidden;background:#F2F2F7;font-family:'D
 .report-row-top{display:flex;gap:12px;align-items:flex-start;}
 .progress-track{margin-top:10px;background:#F0F0F0;border-radius:4px;height:5px;overflow:hidden;}
 .progress-fill{height:5px;border-radius:4px;}
-.progress-fill.yellow{background:#F9A825;}.progress-fill.blue{background:#1976D2;}.progress-fill.green{background:#388E3C;}
+.progress-fill.yellow{background:#F9A825;}.progress-fill.blue{background:#1976D2;}.progress-fill.green{background:#388E3C;}.progress-fill.orange { background: #E65100; }.progress-fill.purple { background: #7B1FA2; }
 .progress-label{font-size:11px;color:#BDBDBD;text-align:right;margin-top:4px;font-weight:500;}
 
 /* ══ MAP ══ */
@@ -343,7 +333,6 @@ textarea.text-in{resize:none;height:80px;line-height:1.5;}
 .toggle-track.on .toggle-thumb{left:23px;}
 
 /* ══ DETAIL ══ */
-/* #2 FIX: detail map — no blank space, proper height, tight to top bar */
 .detail-map-embed{
   width:100%;
   height:200px;
@@ -353,7 +342,6 @@ textarea.text-in{resize:none;height:80px;line-height:1.5;}
   display:block;
   background:#C8D8B4;
 }
-/* Leaflet map inside takes full space of container */
 .detail-map-embed .leaflet-container{height:200px!important;width:100%!important;}
 .detail-hero{background:#fff;margin:0;border-radius:0;overflow:visible;box-shadow:none;border-bottom:1px solid #F0F0F0;}
 .detail-body{padding:16px;}
@@ -379,7 +367,7 @@ textarea.text-in{resize:none;height:80px;line-height:1.5;}
 .media-viewer-content img,.media-viewer-content video{max-width:100%;max-height:84vh;border-radius:12px;background:#111;}
 
 /* ══ TOAST ══ */
-#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1A1A1A;color:#fff;border-radius:12px;padding:11px 20px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:opacity 0.3s,transform 0.3s;max-width:min(85%,480px);width:max-content;text-align:center;pointer-events:none;}
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:#1A1A1A;color:#fff;border-radius:12px;padding:11px 20px;font-size:13px;font-weight:500;z-index:20000 !important;opacity:0;transition:opacity 0.3s,transform 0.3s;max-width:min(85%,480px);width:max-content;text-align:center;pointer-events:none;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 /* ══ MISC ══ */
@@ -429,7 +417,5 @@ textarea.text-in{resize:none;height:80px;line-height:1.5;}
 }
 
 /* ══ WIDE DESKTOP ══ */
-/* Login and signup are intentionally full-screen on all sizes — no card centering */
 @media (min-width:960px){
-  /* nothing to override — fullscreen is the design */
 }
