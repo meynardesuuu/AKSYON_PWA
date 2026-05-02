@@ -5,7 +5,6 @@
 const SUPABASE_URL = "https://dugzytiyhyafdrhisjqg.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_nQN9DQBb7nwR1A6iYH52pQ_jCROHCGS";
 
-// Cache localStorage availability check to avoid repeated try/catch
 const hasLocalStorage = (() => {
   try {
     if (typeof window === 'undefined') return false;
@@ -26,11 +25,8 @@ const __memStore = new Map();
 const safeStorage = {
   getItem: (key) => {
     if (hasLocalStorage) {
-      try {
-        return window.localStorage.getItem(key);
-      } catch {
-        return __memStore.get(key) ?? null;
-      }
+      try { return window.localStorage.getItem(key); } 
+      catch { return __memStore.get(key) ?? null; }
     }
     return __memStore.get(key) ?? null;
   },
@@ -40,18 +36,12 @@ const safeStorage = {
         window.localStorage.setItem(key, value);
         __memStore.set(key, value);
         return;
-      } catch {
-        __memStore.set(key, value);
-      }
-    } else {
-      __memStore.set(key, value);
-    }
+      } catch { __memStore.set(key, value); }
+    } else { __memStore.set(key, value); }
   },
   removeItem: (key) => {
     if (hasLocalStorage) {
-      try {
-        window.localStorage.removeItem(key);
-      } catch {}
+      try { window.localStorage.removeItem(key); } catch {}
     }
     __memStore.delete(key);
   },
@@ -66,9 +56,7 @@ const supabaseClient = createClient
         storage: safeStorage,
         storageKey: 'aksyon-pwa-auth', 
       },
-      realtime: {
-        params: { eventsPerSecond: 10 },
-      },
+      realtime: { params: { eventsPerSecond: 10 } },
     })
   : null;
 
@@ -300,15 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   showLoading(false);
 
-  // INJECT CSS FIX: Guarantee top-bar and back button are NEVER covered up by UI elements
-  const style = document.createElement('style');
-  style.innerHTML = `
-    .top-bar { z-index: 9999 !important; position: relative !important; pointer-events: all !important; }
-    #toast { z-index: 10000 !important; pointer-events: none !important; }
-    #loading-overlay { z-index: 10000 !important; }
-  `;
-  document.head.appendChild(style);
-
   if (window.location.hash) {
     history.replaceState({ root: true }, '', window.location.pathname);
   } else if (!history.state) {
@@ -328,12 +307,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   
-  // ── NEW: AUTO-RELOAD ON SCROLL BOTTOM ──
   document.querySelectorAll('.scroll-area').forEach(scrollBox => {
     scrollBox.addEventListener('scroll', () => {
       const isFeed = scrollBox.closest('#tab-home') || scrollBox.closest('#tab-reports') || scrollBox.id === 'akt-list';
       if (isFeed && !isLoadingReports) {
-        // If user scrolled to the very bottom (with a 20px buffer)
         if (Math.ceil(scrollBox.scrollTop + scrollBox.clientHeight) >= scrollBox.scrollHeight - 20) {
           showToast('🔄 Nag-uupdate ng reports...');
           loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(()=>{});
@@ -821,6 +798,8 @@ function renderReports() {
     const stepLbl = {
       pending:'Natanggap',
       inreview:'Na-review na',
+      inprogress:'In progress',
+      forwarded:'Forwarded',
       resolved:'Naayos na ✓',
       false:'Na-flag para sa beripikasyon',
     }[r.status] || '';
