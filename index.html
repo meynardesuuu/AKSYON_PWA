@@ -122,12 +122,14 @@
           </div>
           <div class="location-name-big" id="home-brgy-name">San Jose del Monte, Bulacan</div>
         </div>
-        <button class="notif-btn" onclick="showToast('Walang bagong notification')">
-          🔔<div class="notif-dot"></div>
+        <!-- 👈 FIX: In-update ko yung button para magbukas nung notification modal natin -->
+        <button class="notif-btn" onclick="togglePWANotifs()">
+          🔔<div class="notif-dot" style="display:none;"></div>
         </button>
       </div>
     </div>
     <div class="scroll-area" id="home-scroll">
+    
       
       <div class="section-header">
         <div class="section-title"><span class="section-dot"></span> Mga Ulat Nearby</div>
@@ -386,16 +388,31 @@
     </div>
     <div class="section-label">CHANNELS</div>
     <div class="notif-section">
-      <div class="notif-row"><span class="notif-ico">📱</span><div class="notif-info"><div class="notif-title">Push Notifications</div><div class="notif-sub">Sa loob ng app</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
+      <div class="notif-row"><span class="notif-ico">📱</span><div class="notif-info"><div class="notif-title">In-App Notifications</div><div class="notif-sub">Popups sa loob ng app</div></div><button class="toggle-track on" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
       <div class="notif-row"><span class="notif-ico">✉️</span><div class="notif-info"><div class="notif-title">Email Notifications</div><div class="notif-sub">Sa iyong email address</div></div><button class="toggle-track off" onclick="toggleNotif(this)"><div class="toggle-thumb"></div></button></div>
     </div>
     <div class="spacer"></div>
   </div>
 </div>
 
-</div><div id="media-viewer" class="media-viewer" onclick="closeMediaViewer(event)">
+</div>
+
+<!-- MEDIA VIEWER -->
+<div id="media-viewer" class="media-viewer" onclick="closeMediaViewer(event)">
   <button class="media-viewer-close" onclick="closeMediaViewer(event)">✕</button>
   <div class="media-viewer-content" id="media-viewer-content" onclick="event.stopPropagation()"></div>
+</div>
+
+<div class="media-viewer" id="pwa-notif-modal" onclick="closePWANotifs(event)">
+  <div class="media-viewer-content" style="background:#fff; border-radius:16px; width:90%; max-width:400px; max-height:80vh; flex-direction:column; display:flex; padding:0; overflow:hidden;" onclick="event.stopPropagation()">
+    <div style="width:100%; padding:16px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center; background:#8B1A1A; color:#fff;">
+      <h3 style="margin:0; font-family:'Syne',sans-serif; font-size:16px;">Mga Notification</h3>
+      <button onclick="closePWANotifs()" style="background:none;border:none;font-size:20px;color:#fff;cursor:pointer;">✕</button>
+    </div>
+    <div id="pwa-notif-list" style="flex:1; overflow-y:auto; padding:0; width:100%; background:#f9f9f9;">
+      <!-- Populated by JS -->
+    </div>
+  </div>
 </div>
 
 <script>
@@ -416,7 +433,6 @@
       positionDropdown();
       if(_orig) _orig(e);
     };
-    // Re-position on resize/scroll in case layout shifts
     window.addEventListener('resize', function(){
       var dd = document.getElementById('scope-dropdown');
       if(dd && dd.classList.contains('open')) positionDropdown();
