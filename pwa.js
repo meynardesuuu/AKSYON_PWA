@@ -12,14 +12,11 @@ const hasLocalStorage = (() => {
     window.localStorage.setItem(test, '1');
     window.localStorage.removeItem(test);
     return true;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 })();
 
 const createClient = (typeof window !== 'undefined' && window.supabase && window.supabase.createClient)
-  ? window.supabase.createClient
-  : null;
+  ? window.supabase.createClient : null;
 
 const __memStore = new Map();
 const safeStorage = {
@@ -32,33 +29,21 @@ const safeStorage = {
   },
   setItem: (key, value) => {
     if (hasLocalStorage) {
-      try {
-        window.localStorage.setItem(key, value);
-        __memStore.set(key, value);
-        return;
-      } catch { __memStore.set(key, value); }
+      try { window.localStorage.setItem(key, value); __memStore.set(key, value); return; } 
+      catch { __memStore.set(key, value); }
     } else { __memStore.set(key, value); }
   },
   removeItem: (key) => {
-    if (hasLocalStorage) {
-      try { window.localStorage.removeItem(key); } catch {}
-    }
+    if (hasLocalStorage) { try { window.localStorage.removeItem(key); } catch {} }
     __memStore.delete(key);
   },
 };
 
 const supabaseClient = createClient
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true,
-        storage: safeStorage,
-        storageKey: 'aksyon-pwa-auth', 
-      },
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: safeStorage, storageKey: 'aksyon-pwa-auth' },
       realtime: { params: { eventsPerSecond: 10 } },
-    })
-  : null;
+    }) : null;
 
 // ╔══════════════════════════════════════════════════════╗
 // ║  DATABASE HELPER FUNCTIONS                          ║
@@ -69,163 +54,79 @@ const db = {
     const { data, error } = await supabaseClient
       .from('reports')
       .select('id,title,detail,category,urgency,status,location,user_id,user_name,user_email,upvotes,upvoted_by,attachments,comments,created_at,updated_at')
-      .order('created_at', { ascending: false })
-      .limit(limit);
-    if (error) throw error;
-    return data || [];
+      .order('created_at', { ascending: false }).limit(limit);
+    if (error) throw error; return data || [];
   },
-
   async getReportById(id) {
-    const { data, error } = await supabaseClient
-      .from('reports')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-    if (error) throw error;
-    return data;
+    const { data, error } = await supabaseClient.from('reports').select('*').eq('id', id).maybeSingle();
+    if (error) throw error; return data;
   },
-
   async createReport(reportData) {
-    const { data, error } = await supabaseClient
-      .from('reports')
-      .insert([reportData])
-      .select()
-      .maybeSingle();
-    if (error) throw error;
-    return data;
+    const { data, error } = await supabaseClient.from('reports').insert([reportData]).select().maybeSingle();
+    if (error) throw error; return data;
   },
-
   async updateReport(id, updates) {
-    const { data, error } = await supabaseClient
-      .from('reports')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .maybeSingle();
-    if (error) throw error;
-    return data;
+    const { data, error } = await supabaseClient.from('reports').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id).select().maybeSingle();
+    if (error) throw error; return data;
   },
-
   async addComment(reportId, comment) {
-    const { data: report, error: fetchErr } = await supabaseClient
-      .from('reports')
-      .select('comments')
-      .eq('id', reportId)
-      .maybeSingle();
+    const { data: report, error: fetchErr } = await supabaseClient.from('reports').select('comments').eq('id', reportId).maybeSingle();
     if (fetchErr) throw fetchErr;
-
     const comments = Array.isArray(report?.comments) ? report.comments : [];
     comments.push(comment);
-
-    const { data, error } = await supabaseClient
-      .from('reports')
-      .update({ comments, updated_at: new Date().toISOString() })
-      .eq('id', reportId)
-      .select()
-      .maybeSingle(); 
-      
+    const { data, error } = await supabaseClient.from('reports').update({ comments, updated_at: new Date().toISOString() }).eq('id', reportId).select().maybeSingle(); 
     if (error) throw error;
     if (!data) throw new Error("Update blocked by Supabase Security (RLS). Please run the SQL fix.");
     return data;
   },
-
   async upvoteReport(reportId, userId) {
-    const { data: report, error: fetchErr } = await supabaseClient
-      .from('reports')
-      .select('upvotes, upvoted_by')
-      .eq('id', reportId)
-      .maybeSingle();
+    const { data: report, error: fetchErr } = await supabaseClient.from('reports').select('upvotes, upvoted_by').eq('id', reportId).maybeSingle();
     if (fetchErr) throw fetchErr;
-
     const upvotedBy = Array.isArray(report?.upvoted_by) ? report.upvoted_by : [];
     const alreadyVoted = upvotedBy.includes(userId);
-    const newUpvotedBy = alreadyVoted
-      ? upvotedBy.filter(id => id !== userId)
-      : [...upvotedBy, userId];
+    const newUpvotedBy = alreadyVoted ? upvotedBy.filter(id => id !== userId) : [...upvotedBy, userId];
     const newCount = Math.max(0, (report?.upvotes || 0) + (alreadyVoted ? -1 : 1));
-
-    const { data, error } = await supabaseClient
-      .from('reports')
-      .update({ upvotes: newCount, upvoted_by: newUpvotedBy, updated_at: new Date().toISOString() })
-      .eq('id', reportId)
-      .select()
-      .maybeSingle();
-
+    const { data, error } = await supabaseClient.from('reports').update({ upvotes: newCount, upvoted_by: newUpvotedBy, updated_at: new Date().toISOString() }).eq('id', reportId).select().maybeSingle();
     if (error) throw error;
-    if (!data) throw new Error("Update blocked by Supabase Security (RLS). Please run the SQL fix.");
     return data;
   },
-
   async uploadFile(file, folder = 'reports') {
     const { data: { user } } = await supabaseClient.auth.getUser();
     const userId = user?.id || 'anon';
     const ext = file.name.split('.').pop();
     const fileName = `${userId}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     const filePath = `${folder}/${fileName}`;
-
-    const { error: uploadErr } = await supabaseClient.storage
-      .from('reports')
-      .upload(filePath, file, { cacheControl: '3600', upsert: false });
+    const { error: uploadErr } = await supabaseClient.storage.from('reports').upload(filePath, file, { cacheControl: '3600', upsert: false });
     if (uploadErr) throw uploadErr;
-
-    const { data: urlData } = supabaseClient.storage
-      .from('reports')
-      .getPublicUrl(filePath);
-
-    return {
-      url: urlData.publicUrl,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      path: filePath,
-    };
+    const { data: urlData } = supabaseClient.storage.from('reports').getPublicUrl(filePath);
+    return { url: urlData.publicUrl, name: file.name, type: file.type, size: file.size, path: filePath };
   },
-
   async deleteFile(filePath) {
     const { error } = await supabaseClient.storage.from('reports').remove([filePath]);
     if (error) throw error;
   },
-
   async getUserProfile(userId) {
-    const { data, error } = await supabaseClient
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
-    if (error) {
-      console.warn('getUserProfile:', error.message);
-      return null;
-    }
+    const { data, error } = await supabaseClient.from('users').select('*').eq('id', userId).maybeSingle();
+    if (error) { console.warn('getUserProfile:', error.message); return null; }
     return data;
   },
-
   async updateUserProfile(userId, profileData) {
-    const { data, error } = await supabaseClient
-      .from('users')
-      .upsert({ id: userId, ...profileData, updated_at: new Date().toISOString() },
-               { onConflict: 'id' })
-      .select()
-      .maybeSingle();
+    const { data, error } = await supabaseClient.from('users').upsert({ id: userId, ...profileData, updated_at: new Date().toISOString() }, { onConflict: 'id' }).select().maybeSingle();
     if (error) throw error;
     return data;
-  },
+  }
 };
 
 window.db = db;
 window.supabaseClient = supabaseClient;
 
-if (!supabaseClient) {
-  console.error(
-    '[Supabase] Failed to initialize client. ' +
-    'Check that `https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2` loaded successfully.'
-  );
-}
-
-// ── STATE ──
+// ╔══════════════════════════════════════════════════════╗
+// ║  STATE & CACHE                                      ║
+// ╚══════════════════════════════════════════════════════╝
 let screenStack = [];
 let currentTab = 'home';
 let reportsFilter = 'lahat';
-let reportsScope = 'mine'; // 'mine' | 'community'
+let reportsScope = 'mine'; 
 let aktFilter = 'lahat';
 let selectedCat = 'Ilaw';
 let selectedUrgency = 'Katamtaman';
@@ -244,48 +145,58 @@ let isLoadingReports = false;
 let loginHandled = false;     
 let isRegisteringFlow = false;
 let activeAuthUserId = null;
-const FAST_START_REPORT_LIMIT = 20;
 const FULL_REPORT_LIMIT = 100;
 
-// ── CACHE LAYER ──
 const CACHE = {
   reports: { data: [], timestamp: 0, ttl: 300000 }, 
   profile: { data: null, timestamp: 0, ttl: 600000 }, 
-  
-  isExpired(key) {
-    return Date.now() - this[key].timestamp > this[key].ttl;
-  },
-  
-  set(key, data) {
-    this[key] = { data, timestamp: Date.now(), ttl: this[key].ttl };
-  },
-  
-  get(key) {
-    if (!this.isExpired(key)) {
-      return this[key].data;
-    }
-    return null;
-  },
-  
-  clear() {
-    this.reports.data = [];
-    this.reports.timestamp = 0;
-    this.profile.data = null;
-    this.profile.timestamp = 0;
-  }
+  isExpired(key) { return Date.now() - this[key].timestamp > this[key].ttl; },
+  set(key, data) { this[key] = { data, timestamp: Date.now(), ttl: this[key].ttl }; },
+  get(key) { if (!this.isExpired(key)) { return this[key].data; } return null; },
+  clear() { this.reports.data = []; this.reports.timestamp = 0; this.profile.data = null; this.profile.timestamp = 0; }
 };
+
+// ╔══════════════════════════════════════════════════════╗
+// ║  UTILITIES & UI HELPERS (MOVED TO TOP TO FIX BUGS)  ║
+// ╚══════════════════════════════════════════════════════╝
+function getTimeAgo(dateString) {
+  if (!dateString) return '';
+  const diff = Date.now() - new Date(dateString).getTime();
+  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
+  if (m < 1) return 'Just now'; if (m < 60) return `${m}m ago`; if (h < 24) return `${h}h ago`; if (d < 7) return `${d}d ago`;
+  return new Date(dateString).toLocaleDateString();
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function showLoading(show) {
+  const overlay = document.getElementById('loading-overlay');
+  if (!overlay) return;
+  if (show) overlay.classList.add('show');
+  else overlay.classList.remove('show');
+}
+
+function escHtml(str) { 
+  if (!str) return ''; 
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); 
+}
 
 function withTimeout(promise, ms, label = 'operation') {
   let t;
-  const timeout = new Promise((_, reject) => {
-    t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
+  const timeout = new Promise((_, reject) => { t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms); });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
 }
 
-// ── INITIALIZATION ──
+// ╔══════════════════════════════════════════════════════╗
+// ║  INITIALIZATION                                     ║
+// ╚══════════════════════════════════════════════════════╝
 document.addEventListener('DOMContentLoaded', () => {
-
   showLoading(false);
 
   if (window.location.hash) {
@@ -301,9 +212,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const dropdown = document.getElementById('scope-dropdown');
     const btn = document.getElementById('reports-title-btn');
     if (dropdown && dropdown.classList.contains('open')) {
-      if (!dropdown.contains(e.target) && !btn?.contains(e.target)) {
-        closeScopeDropdown();
-      }
+      if (!dropdown.contains(e.target) && !btn?.contains(e.target)) closeScopeDropdown();
     }
   });
   
@@ -329,13 +238,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isRegisteringFlow && event === 'SIGNED_IN') return;
 
     if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-      if (loginHandled && event === 'SIGNED_IN') {
-        loginHandled = false;
-        return;
-      }
-      if (currentUser?.id && currentUser.id !== session.user.id) {
-        cleanupSessionState();
-      }
+      if (loginHandled && event === 'SIGNED_IN') { loginHandled = false; return; }
+      if (currentUser?.id && currentUser.id !== session.user.id) cleanupSessionState();
 
       loginHandled = true;
       currentUser = session.user;
@@ -349,6 +253,69 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// ── PWA NOTIFICATION MODAL ENGINE ──
+function togglePWANotifs() {
+  const modal = document.getElementById('pwa-notif-modal');
+  if (modal) {
+    modal.classList.add('show');
+    updatePWANotifs();
+  }
+}
+
+function closePWANotifs(e) {
+  const modal = document.getElementById('pwa-notif-modal');
+  if (modal) modal.classList.remove('show');
+}
+
+function updatePWANotifs() {
+  const list = document.getElementById('pwa-notif-list');
+  const dot = document.querySelector('.notif-dot');
+  if(!list) return;
+
+  const myReports = userReports.filter(r => currentUser && r.user_id === currentUser.id);
+  let notifs = [];
+
+  myReports.forEach(r => {
+    if (r.status !== 'pending') {
+      notifs.push({
+        text: `Na-update ang status ng report mo: "${r.title}"`,
+        time: new Date(r.updated_at || r.created_at).getTime(),
+        id: r.id, icon: '🔄'
+      });
+    }
+    if (r.comments && r.comments.length > 0) {
+      const adminComments = r.comments.filter(c => c.is_admin);
+      if (adminComments.length > 0) {
+        const last = adminComments[adminComments.length - 1];
+        notifs.push({
+          text: `Nag-iwan ng komento ang LGU sa iyong report na "${r.title}"`,
+          time: new Date(last.created_at).getTime(),
+          id: r.id, icon: '💬'
+        });
+      }
+    }
+  });
+
+  notifs.sort((a,b) => b.time - a.time);
+  notifs = notifs.slice(0, 15);
+
+  if(notifs.length > 0) {
+    if(dot) dot.style.display = 'block';
+    list.innerHTML = notifs.map(n => `
+      <div onclick="closePWANotifs(); openDetail('${n.id}')" style="padding:14px 16px; border-bottom:1px solid #eee; display:flex; gap:12px; align-items:center; cursor:pointer;">
+        <div style="font-size:22px; filter:grayscale(0.2);">${n.icon}</div>
+        <div style="flex:1;">
+          <div style="font-size:13px; color:#1a1a1a; font-weight:600; line-height:1.4;">${escHtml(n.text)}</div>
+          <div style="font-size:11px; color:#999; margin-top:4px;">${getTimeAgo(new Date(n.time).toISOString())}</div>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    if(dot) dot.style.display = 'none';
+    list.innerHTML = `<div style="padding:30px 20px; text-align:center; color:#999; font-size:13px;">Walang bagong notification.</div>`;
+  }
+}
 
 // ── SHOW / HIDE SCREENS ──
 function showLoginScreen() {
@@ -375,129 +342,62 @@ async function handleUserLogin(user) {
       withTimeout(loadAllReports(FULL_REPORT_LIMIT), 7000, 'Load all reports'),
     ]);
 
-    updateProfileUI();
-    renderAll();
-    subscribeToReports();
+    updateProfileUI(); renderAll(); subscribeToReports();
     setTimeout(requestGPSFromHome, 600);
 
-    if (reportsRes.status === 'rejected') {
-      loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
-    }
-  } catch (error) {
-    renderAll();
-  } finally {
-    clearTimeout(loadingFailsafe);
-    showLoading(false);
-  }
+    if (reportsRes.status === 'rejected') loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
+  } catch (error) { renderAll(); } 
+  finally { clearTimeout(loadingFailsafe); showLoading(false); }
 }
 
-function handleUserLogout() {
-  cleanupSessionState();
-  showLoginScreen();
-}
+function handleUserLogout() { cleanupSessionState(); showLoginScreen(); }
 
 function cleanupSessionState() {
-  currentUser = null;
-  currentUserProfile = null;
-  userReports = [];
-  screenStack = [];
-  homeLocationInitialized = false;
-  isLoadingReports = false;
-  currentDetailReportId = null;
-  setReportsScope('mine');
-  CACHE.clear(); 
-
-  if (realtimeChannel) {
-    supabaseClient.removeChannel(realtimeChannel).catch(() => {});
-    realtimeChannel = null;
-  }
+  currentUser = null; currentUserProfile = null; userReports = []; screenStack = [];
+  homeLocationInitialized = false; isLoadingReports = false; currentDetailReportId = null;
+  setReportsScope('mine'); CACHE.clear(); 
+  if (realtimeChannel) { supabaseClient.removeChannel(realtimeChannel).catch(() => {}); realtimeChannel = null; }
 }
 
 // ── AUTHENTICATION ──
 function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value.trim();
+  const email = document.getElementById('login-email').value.trim(), password = document.getElementById('login-password').value.trim();
   if (!email || !password) { showToast('❌ Fill in all fields'); return; }
-
   showLoading(true);
-  supabaseClient.auth.signInWithPassword({ email, password })
-    .then(({ error }) => {
-      if (error) { showLoading(false); showToast('❌ ' + error.message); }
-    })
-    .catch(err => { showLoading(false); showToast('❌ ' + err.message); });
+  supabaseClient.auth.signInWithPassword({ email, password }).then(({ error }) => { if (error) { showLoading(false); showToast('❌ ' + error.message); } }).catch(err => { showLoading(false); showToast('❌ ' + err.message); });
 }
 
 function doSignup() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value.trim();
+  const email = document.getElementById('login-email').value.trim(), password = document.getElementById('login-password').value.trim();
   if (!email || !password) { showToast('❌ Fill in all fields'); return; }
   if (password.length < 6) { showToast('❌ Password must be 6+ characters'); return; }
-
   showLoading(true);
-  supabaseClient.auth.signUp({ email, password })
-    .then(({ error }) => {
-      showLoading(false);
-      if (error) { showToast('❌ ' + error.message); }
-      else { showToast('✅ Account created! Check email or log in.'); }
-    })
-    .catch(err => { showLoading(false); showToast('❌ ' + err.message); });
+  supabaseClient.auth.signUp({ email, password }).then(({ error }) => {
+    showLoading(false);
+    if (error) { showToast('❌ ' + error.message); } else { showToast('✅ Account created! Check email or log in.'); }
+  }).catch(err => { showLoading(false); showToast('❌ ' + err.message); });
 }
 
-function doAnonymousLogin() {
-  showToast('⚠️ Demo: enable Anonymous sign-ins in Supabase Auth settings');
-}
-
-function switchLoginMode() {
-  document.getElementById('login-email').focus();
-}
-
-function doLogout() {
-  showLoading(true);
-  supabaseClient.auth.signOut()
-    .then(() => { showLoading(false); })
-    .catch(err => { showLoading(false); showToast('❌ ' + err.message); });
-}
+function doAnonymousLogin() { showToast('⚠️ Demo: enable Anonymous sign-ins in Supabase Auth settings'); }
+function switchLoginMode() { document.getElementById('login-email').focus(); }
+function doLogout() { showLoading(true); supabaseClient.auth.signOut().then(() => { showLoading(false); }).catch(err => { showLoading(false); showToast('❌ ' + err.message); }); }
 
 async function loadUserProfile() {
   if (!currentUser) return;
   const cached = CACHE.get('profile');
-  if (cached) {
-    currentUserProfile = cached;
-    return;
-  }
+  if (cached) { currentUserProfile = cached; return; }
   try {
     let profile = await db.getUserProfile(currentUser.id);
     if (!profile) {
-      profile = await db.updateUserProfile(currentUser.id, {
-        id: currentUser.id,
-        first_name: 'User',
-        last_name: 'Profile',
-        email: currentUser.email,
-        phone: '',
-        barangay: 'San Jose del Monte',
-        city: 'Bulacan',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
+      profile = await db.updateUserProfile(currentUser.id, { id: currentUser.id, first_name: 'User', last_name: 'Profile', email: currentUser.email, phone: '', barangay: 'San Jose del Monte', city: 'Bulacan', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
     }
-    currentUserProfile = profile;
-    CACHE.set('profile', profile);
-  } catch (error) {
-    currentUserProfile = {
-      first_name: 'User', last_name: 'Profile',
-      email: currentUser?.email || '',
-      barangay: 'San Jose del Monte', city: 'Bulacan'
-    };
-  }
+    currentUserProfile = profile; CACHE.set('profile', profile);
+  } catch (error) { currentUserProfile = { first_name: 'User', last_name: 'Profile', email: currentUser?.email || '', barangay: 'San Jose del Monte', city: 'Bulacan' }; }
 }
 
 function subscribeToReports() {
-  if (realtimeChannel) {
-    supabaseClient.removeChannel(realtimeChannel).catch(() => {});
-    realtimeChannel = null;
-  }
-  realtimeChannel = supabaseClient
-    .channel('reports-realtime')
+  if (realtimeChannel) { supabaseClient.removeChannel(realtimeChannel).catch(() => {}); realtimeChannel = null; }
+  realtimeChannel = supabaseClient.channel('reports-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, (payload) => {
       if (payload.eventType === 'UPDATE' && payload.new) {
         const idx = userReports.findIndex(r => String(r.id) === String(payload.new.id));
@@ -505,85 +405,66 @@ function subscribeToReports() {
           userReports[idx] = payload.new;
           CACHE.set('reports', userReports);
           renderAll();
-          if (String(currentDetailReportId) === String(payload.new.id) &&
-              document.getElementById('screen-detail') &&
-              document.getElementById('screen-detail').classList.contains('active')) {
-            
-            // Fix layout jump during live updates
+          
+          if (currentUser && payload.new.user_id === currentUser.id) {
+             showToast('🔔 May update sa iyong report!');
+             updatePWANotifs();
+          }
+
+          if (String(currentDetailReportId) === String(payload.new.id) && document.getElementById('screen-detail') && document.getElementById('screen-detail').classList.contains('active')) {
             const scrollBox = document.getElementById('detail-content');
             const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
             renderDetailContent(payload.new);
             setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
-            
           }
           return;
         }
       }
       CACHE.reports.timestamp = 0;
       loadAllReports(FULL_REPORT_LIMIT, { force: true }).catch(() => {});
-    })
-    .subscribe();
+    }).subscribe();
 }
 
 async function loadAllReports(limit = FULL_REPORT_LIMIT, options = {}) {
   const force = !!options.force;
   if (!force) {
     const cached = CACHE.get('reports');
-    if (cached && cached.length > 0) {
-      userReports = cached;
-      renderAll();
-      return;
-    }
+    if (cached && cached.length > 0) { userReports = cached; renderAll(); return; }
   }
-  
   if (isLoadingReports && !force) return;
   isLoadingReports = true;
   try {
     userReports = await db.getReports(limit);
     CACHE.set('reports', userReports);
     renderAll();
-    if (currentDetailReportId && document.getElementById('screen-detail') &&
-        document.getElementById('screen-detail').classList.contains('active')) {
+    if (currentDetailReportId && document.getElementById('screen-detail') && document.getElementById('screen-detail').classList.contains('active')) {
       db.getReportById(currentDetailReportId).then(fresh => {
         if (!fresh) return;
         const idx = userReports.findIndex(x => String(x.id) === String(currentDetailReportId));
         if (idx >= 0) userReports[idx] = fresh;
-        
         const scrollBox = document.getElementById('detail-content');
         const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
         renderDetailContent(fresh);
         setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
-
       }).catch(() => {});
     }
   } catch (error) {
     if (userReports.length === 0) {
       const empty = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Hindi ma-load ang mga report.<br>I-check ang iyong koneksyon.</div>';
-      ['nearby-list','resolved-list','reports-list'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = empty;
-      });
+      ['nearby-list','resolved-list','reports-list'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = empty; });
     }
-  } finally {
-    isLoadingReports = false;
-  }
+  } finally { isLoadingReports = false; }
 }
 
 function updateProfileUI() {
   if (!currentUser) return;
-  const fn = currentUserProfile?.first_name || 'User';
-  const ln = currentUserProfile?.last_name || 'Profile';
+  const fn = currentUserProfile?.first_name || 'User', ln = currentUserProfile?.last_name || 'Profile';
   const setVal = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
   const setInp = (id, val) => { const e = document.getElementById(id); if (e) e.value = val; };
-  setVal('profile-name', `${fn} ${ln}`.trim().toUpperCase());
-  setVal('profile-email', currentUser.email);
+  setVal('profile-name', `${fn} ${ln}`.trim().toUpperCase()); setVal('profile-email', currentUser.email);
   setVal('profile-brgy', currentUserProfile?.barangay || 'San Jose del Monte');
-  setInp('edit-email', currentUser.email);
-  setInp('edit-firstname', fn);
-  setInp('edit-lastname', ln);
-  setInp('edit-phone', currentUserProfile?.phone || '');
-  setInp('edit-brgy', currentUserProfile?.barangay || '');
-  setInp('edit-city', currentUserProfile?.city || '');
+  setInp('edit-email', currentUser.email); setInp('edit-firstname', fn); setInp('edit-lastname', ln);
+  setInp('edit-phone', currentUserProfile?.phone || ''); setInp('edit-brgy', currentUserProfile?.barangay || ''); setInp('edit-city', currentUserProfile?.city || '');
 }
 
 // ── SUBMIT REPORT ──
@@ -593,52 +474,30 @@ async function submitReport() {
   if (!currentUser) { showToast('❌ Mag-login muna'); return; }
 
   const submitBtn = document.getElementById('submit-btn');
-  submitBtn.disabled = true;
-  showLoading(true);
+  submitBtn.disabled = true; showLoading(true);
 
   try {
     let attachments = [];
     for (const file of selectedFiles) {
-      try {
-        attachments.push(await db.uploadFile(file));
-      } catch (err) {
-        showToast('⚠️ Hindi na-upload: ' + file.name);
-      }
+      try { attachments.push(await db.uploadFile(file)); } catch (err) { showToast('⚠️ Hindi na-upload: ' + file.name); }
     }
 
     const gpsText = getBestReportAddress();
     await db.createReport({
-      title,
-      detail: document.getElementById('f-detail').value || '',
-      category: selectedCat,
-      urgency: selectedUrgency,
-      status: 'pending',
+      title, detail: document.getElementById('f-detail').value || '',
+      category: selectedCat, urgency: selectedUrgency, status: 'pending',
       location: { lat: userLat, lng: userLng, address: gpsText },
-      user_id: currentUser.id,
-      user_name: `${currentUserProfile?.first_name || 'User'} ${currentUserProfile?.last_name || ''}`.trim(),
-      user_email: currentUser.email,
-      upvotes: 0,
-      upvoted_by: [],
-      attachments,
-      comments: [],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      user_id: currentUser.id, user_name: `${currentUserProfile?.first_name || 'User'} ${currentUserProfile?.last_name || ''}`.trim(),
+      user_email: currentUser.email, upvotes: 0, upvoted_by: [], attachments, comments: [],
+      created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     });
 
-    showLoading(false);
-    submitBtn.disabled = false;
-    showToast('✅ Na-submit ang report!');
-    document.getElementById('f-title').value = '';
-    document.getElementById('f-detail').value = '';
-    selectedFiles = [];
-    document.getElementById('photo-previews').innerHTML = '';
+    showLoading(false); submitBtn.disabled = false; showToast('✅ Na-submit ang report!');
+    document.getElementById('f-title').value = ''; document.getElementById('f-detail').value = '';
+    selectedFiles = []; document.getElementById('photo-previews').innerHTML = '';
     popScreen();
     await loadAllReports(FULL_REPORT_LIMIT, { force: true });
-  } catch (error) {
-    showLoading(false);
-    submitBtn.disabled = false;
-    showToast('❌ ' + (error.message || 'Submit failed'));
-  }
+  } catch (error) { showLoading(false); submitBtn.disabled = false; showToast('❌ ' + (error.message || 'Submit failed')); }
 }
 
 // ── FILE HANDLING ──
@@ -657,10 +516,7 @@ function handlePhotoUpload(event) {
   event.target.value = '';
 }
 
-function removeFile(index) {
-  selectedFiles.splice(index, 1);
-  renderPhotoPreviews();
-}
+function removeFile(index) { selectedFiles.splice(index, 1); renderPhotoPreviews(); }
 
 function renderPhotoPreviews() {
   const container = document.getElementById('photo-previews');
@@ -670,75 +526,28 @@ function renderPhotoPreviews() {
     div.className = 'photo-thumb';
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
-      reader.onload = e => {
-        div.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;">
-          <button class="photo-remove" onclick="removeFile(${index})">×</button>`;
-      };
+      reader.onload = e => { div.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;"><button class="photo-remove" onclick="removeFile(${index})">×</button>`; };
       reader.readAsDataURL(file);
     } else {
-      div.innerHTML = `<div style="width:100%;height:100%;background:#333;display:flex;align-items:center;justify-content:center;border-radius:10px;color:#fff;font-size:28px;">🎥</div>
-        <button class="photo-remove" onclick="removeFile(${index})">×</button>`;
+      div.innerHTML = `<div style="width:100%;height:100%;background:#333;display:flex;align-items:center;justify-content:center;border-radius:10px;color:#fff;font-size:28px;">🎥</div><button class="photo-remove" onclick="removeFile(${index})">×</button>`;
     }
     container.appendChild(div);
   });
 }
 
-// ── RENDER ──
-function renderAll() {
-  renderHome();
-  renderReports();
-  renderProfileStats();
-}
-
+// ── RENDER HELPERS ──
 function chipLabel(s) {
-  return {
-    pending: '⏳ Pending',
-    inreview: '👀 Acknowledged',
-    inprogress: '🚧 In Progress',
-    forwarded: '🏢 Forwarded',
-    resolved: '✅ Resolved',
-    false: '🚩 False Report',
-  }[s] || s;
+  return { pending: '⏳ Pending', inreview: '👀 Acknowledged', inprogress: '🚧 In Progress', forwarded: '🏢 Forwarded', resolved: '✅ Resolved', false: '🚩 False Report' }[s] || s;
 }
-
-function stepFromStatus(s) { 
-  return { pending:1, inreview:2, inprogress:2, forwarded:2, resolved:3, false:2 }[s] || 1; 
-}
-
-function progressFromStatus(s) { 
-  return { pending:24, inreview:50, inprogress:75, forwarded:75, resolved:100, false:50 }[s] || 24; 
-}
-
-function pcolorFromStatus(s) { 
-  return { pending:'yellow', inreview:'blue', inprogress:'orange', forwarded:'purple', resolved:'green', false:'red' }[s] || 'yellow'; 
-}
-
-function getTimeAgo(dateString) {
-  if (!dateString) return '';
-  const diff = Date.now() - new Date(dateString).getTime();
-  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
-  if (m < 1) return 'Just now';
-  if (m < 60) return `${m}m ago`;
-  if (h < 24) return `${h}h ago`;
-  if (d < 7) return `${d}d ago`;
-  return new Date(dateString).toLocaleDateString();
-}
-
-function getIconForCategory(cat) {
-  return { Ilaw: '💡', Kalsada: '🚧', Basura: '🗑️', Tubig: '💧', Baha: '🌊', 'Iba pa': '📌' }[cat] || '📌';
-}
-
-function escHtml(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+function stepFromStatus(s) { return { pending:1, inreview:2, inprogress:2, forwarded:2, resolved:3, false:2 }[s] || 1; }
+function progressFromStatus(s) { return { pending:24, inreview:50, inprogress:75, forwarded:75, resolved:100, false:50 }[s] || 24; }
+function pcolorFromStatus(s) { return { pending:'yellow', inreview:'blue', inprogress:'orange', forwarded:'purple', resolved:'green', false:'red' }[s] || 'yellow'; }
+function getIconForCategory(cat) { return { Ilaw: '💡', Kalsada: '🚧', Basura: '🗑️', Tubig: '💧', Baha: '🌊', 'Iba pa': '📌' }[cat] || '📌'; }
 
 function getReportMediaPreview(report) {
   const files = Array.isArray(report?.attachments) ? report.attachments : [];
   const firstImage = files.find(f => f?.type && String(f.type).startsWith('image/') && f?.url);
-  if (firstImage) {
-    return `<img src="${escHtml(firstImage.url)}" alt="Report photo" class="report-thumb-img" onerror="this.parentElement.innerHTML='${getIconForCategory(report.category)}'">`;
-  }
+  if (firstImage) { return `<img src="${escHtml(firstImage.url)}" alt="Report photo" class="report-thumb-img" onerror="this.parentElement.innerHTML='${getIconForCategory(report.category)}'">`; }
   return getIconForCategory(report.category);
 }
 
@@ -753,13 +562,19 @@ function reportTile(r) {
       <div class="report-tile-loc">${escHtml(r.location?.address || 'Unknown')} · ${getTimeAgo(r.created_at)}</div>
       <div class="report-tile-footer">
         <span class="chip ${r.status}">${chipLabel(r.status)}</span>
-        <button class="upvote-btn ${isVoted?'voted':''}" onclick="event.stopPropagation();upvoteReport('${r.id}')">
-          ${isVoted?'❤️':'🔼'} ${r.upvotes||0}
-        </button>
+        <button class="upvote-btn ${isVoted?'voted':''}" onclick="event.stopPropagation();upvoteReport('${r.id}')">${isVoted?'❤️':'🔼'} ${r.upvotes||0}</button>
       </div>
     </div>
     <div class="report-tile-icon">${mediaPreview}</div>
   </div>`;
+}
+
+// ── RENDER SCREENS ──
+function renderAll() {
+  renderHome();
+  renderReports();
+  renderProfileStats();
+  updatePWANotifs();
 }
 
 function renderHome() {
@@ -773,46 +588,26 @@ function renderHome() {
 }
 
 function renderReports() {
-  const source = reportsScope === 'community'
-    ? userReports
-    : userReports.filter(r => currentUser && r.user_id === currentUser.id);
+  const source = reportsScope === 'community' ? userReports : userReports.filter(r => currentUser && r.user_id === currentUser.id);
   const filtered = reportsFilter === 'lahat' ? source : source.filter(r => r.status === reportsFilter);
   const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-  set('stat-total', source.length);
-  set('stat-inreview', source.filter(r => r.status === 'inreview').length);
-  set('stat-resolved', source.filter(r => r.status === 'resolved').length);
+  set('stat-total', source.length); set('stat-inreview', source.filter(r => r.status === 'inreview').length); set('stat-resolved', source.filter(r => r.status === 'resolved').length);
 
   const reportsTitle = document.querySelector('#tab-reports .top-bar h2');
-  if (reportsTitle) {
-    reportsTitle.textContent = reportsScope === 'community' ? '📋 Community Reports' : '📋 Mga Report Ko';
-  }
+  if (reportsTitle) { reportsTitle.textContent = reportsScope === 'community' ? '📋 Community Reports' : '📋 Mga Report Ko'; }
   const listEl = document.getElementById('reports-list');
   if (!listEl) return;
-  if (!filtered.length) {
-    listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Wala pang report sa kategoryang ito</div>';
-    return;
-  }
+  if (!filtered.length) { listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Wala pang report sa kategoryang ito</div>'; return; }
+  
   listEl.innerHTML = filtered.map(r => {
     const prog = progressFromStatus(r.status);
     const pcol = pcolorFromStatus(r.status);
-    const stepLbl = {
-      pending:'Natanggap',
-      inreview:'Na-review na',
-      inprogress:'In progress',
-      forwarded:'Forwarded',
-      resolved:'Naayos na ✓',
-      false:'Na-flag para sa beripikasyon',
-    }[r.status] || '';
+    const stepLbl = { pending:'Natanggap', inreview:'Na-review na', inprogress:'In progress', forwarded:'Forwarded', resolved:'Naayos na ✓', false:'Na-flag para sa beripikasyon' }[r.status] || '';
     const reporterName = escHtml(r.user_name || 'Unknown user');
     const mediaPreview = getReportMediaPreview(r);
     return `<div class="report-row" onclick="openDetail('${r.id}')">
       <div class="report-row-top">
-        <div style="flex:1;min-width:0;">
-          <div class="report-tile-title">${escHtml(r.title)}</div>
-          <div class="report-byline">Reported by ${reporterName}</div>
-          <div class="report-tile-loc">${escHtml(r.location?.address||'Unknown')} · ${getTimeAgo(r.created_at)}</div>
-          <div style="margin-top:7px;"><span class="chip ${r.status}">${chipLabel(r.status)}</span></div>
-        </div>
+        <div style="flex:1;min-width:0;"><div class="report-tile-title">${escHtml(r.title)}</div><div class="report-byline">Reported by ${reporterName}</div><div class="report-tile-loc">${escHtml(r.location?.address||'Unknown')} · ${getTimeAgo(r.created_at)}</div><div style="margin-top:7px;"><span class="chip ${r.status}">${chipLabel(r.status)}</span></div></div>
         <div class="report-tile-icon report-row-icon">${mediaPreview}</div>
       </div>
       <div class="progress-track"><div class="progress-fill ${pcol}" style="width:${prog}%"></div></div>
@@ -822,25 +617,20 @@ function renderReports() {
 }
 
 function toggleScopeDropdown() {
-  const menu = document.getElementById('scope-dropdown');
-  const btn  = document.getElementById('reports-title-btn');
+  const menu = document.getElementById('scope-dropdown'), btn  = document.getElementById('reports-title-btn');
   if (!menu) return;
-  const open = menu.classList.contains('open');
-  menu.classList.toggle('open', !open);
+  const open = menu.classList.contains('open'); menu.classList.toggle('open', !open);
   if (btn) btn.setAttribute('aria-expanded', String(!open));
 }
 
 function closeScopeDropdown() {
-  const menu = document.getElementById('scope-dropdown');
-  const btn  = document.getElementById('reports-title-btn');
+  const menu = document.getElementById('scope-dropdown'), btn  = document.getElementById('reports-title-btn');
   if (menu) menu.classList.remove('open');
   if (btn)  btn.setAttribute('aria-expanded', 'false');
 }
 
 function selectScope(scope) {
-  setReportsScope(scope);
-  closeScopeDropdown();
-  reportsFilter = 'lahat';
+  setReportsScope(scope); closeScopeDropdown(); reportsFilter = 'lahat';
   document.querySelectorAll('#reports-filter-bar .filter-chip').forEach(c => c.classList.remove('active'));
   const def = document.querySelector('#reports-filter-bar .filter-chip[data-filter="lahat"]');
   if (def) def.classList.add('active');
@@ -849,29 +639,18 @@ function selectScope(scope) {
 
 function setReportsScope(scope) {
   reportsScope = scope === 'community' ? 'community' : 'mine';
-  ['mine','community'].forEach(s => {
-    const el = document.getElementById('scope-opt-' + s);
-    if (el) el.classList.toggle('active', s === reportsScope);
-  });
+  ['mine','community'].forEach(s => { const el = document.getElementById('scope-opt-' + s); if (el) el.classList.toggle('active', s === reportsScope); });
   const title = document.getElementById('reports-tab-title');
   if (title) title.textContent = reportsScope === 'community' ? '🌐 Community Reports' : '📋 Mga Report Ko';
 }
 
-function openCommunityReports() {
-  selectScope('community');
-  switchTab('reports');
-}
-
-function openMyReports() {
-  selectScope('mine');
-  switchTab('reports');
-}
+function openCommunityReports() { selectScope('community'); switchTab('reports'); }
+function openMyReports() { selectScope('mine'); switchTab('reports'); }
 
 function filterReports(el) {
   reportsFilter = el.dataset.filter;
   document.querySelectorAll('#reports-filter-bar .filter-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  renderReports();
+  el.classList.add('active'); renderReports();
 }
 
 function renderAkt() {
@@ -879,10 +658,7 @@ function renderAkt() {
   const filtered = aktFilter === 'lahat' ? mine : mine.filter(r => r.status === aktFilter);
   const listEl = document.getElementById('akt-list');
   if (!listEl) return;
-  if (!filtered.length) {
-    listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Walang aktibidad pa</div>';
-    return;
-  }
+  if (!filtered.length) { listEl.innerHTML = '<div style="text-align:center;padding:30px;color:#999;font-size:13px;">Walang aktibidad pa</div>'; return; }
   const steps = ['Received','Reviewed','Resolved'];
   listEl.innerHTML = '<div style="height:10px;"></div>' + filtered.map(r => {
     const stepN = stepFromStatus(r.status);
@@ -892,42 +668,24 @@ function renderAkt() {
     const nodes = steps.map((s,i) => {
       const done = r.status==='resolved' || i < stepN;
       const active = !done&&i===stepN-1;
-      return `<div class="step-node">
-        <div class="step-circle ${done?'done':(active?'active':'')}"></div>
-        <div class="step-name ${done?'done':(active?'active':'')}">${s}</div>
-      </div>`;
+      return `<div class="step-node"><div class="step-circle ${done?'done':(active?'active':'')}"></div><div class="step-name ${done?'done':(active?'active':'')}">${s}</div></div>`;
     }).join('');
     return `<div class="akt-card" onclick="openDetail('${r.id}')">
       <div style="display:flex;gap:12px;align-items:flex-start;">
         <div class="report-tile-icon" style="width:44px;height:44px;font-size:22px;">${getIconForCategory(r.category)}</div>
-        <div style="flex:1;min-width:0;">
-          <div class="report-tile-title">${escHtml(r.title)}</div>
-          <div class="report-tile-loc">${escHtml(r.location?.address||'Unknown')}</div>
-          <div style="margin-top:6px;"><span class="chip ${r.status}">${chipLabel(r.status)}</span></div>
-        </div>
+        <div style="flex:1;min-width:0;"><div class="report-tile-title">${escHtml(r.title)}</div><div class="report-tile-loc">${escHtml(r.location?.address||'Unknown')}</div><div style="margin-top:6px;"><span class="chip ${r.status}">${chipLabel(r.status)}</span></div></div>
       </div>
-      <div class="track-wrapper">
-        <div class="track-bg"></div>
-        <div class="track-progress ${pct} ${pclr}"></div>
-        <div class="step-row">${nodes}</div>
-      </div>
+      <div class="track-wrapper"><div class="track-bg"></div><div class="track-progress ${pct} ${pclr}"></div><div class="step-row">${nodes}</div></div>
     </div>`;
   }).join('') + '<div style="height:16px;"></div>';
 }
 
-function filterAkt(el) {
-  aktFilter = el.dataset.filter;
-  document.querySelectorAll('#akt-filter-bar .filter-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  renderAkt();
-}
+function filterAkt(el) { aktFilter = el.dataset.filter; document.querySelectorAll('#akt-filter-bar .filter-chip').forEach(c => c.classList.remove('active')); el.classList.add('active'); renderAkt(); }
 
 function renderProfileStats() {
   const mine = userReports.filter(r => currentUser && r.user_id === currentUser.id);
   const set = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-  set('ps-total', mine.length);
-  set('ps-resolved', mine.filter(r => r.status==='resolved').length);
-  set('ps-pending', mine.filter(r => r.status==='pending').length);
+  set('ps-total', mine.length); set('ps-resolved', mine.filter(r => r.status==='resolved').length); set('ps-pending', mine.filter(r => r.status==='pending').length);
 }
 
 // ── DETAIL CONTENT RENDERER ─────────
@@ -943,10 +701,7 @@ function renderDetailContent(r) {
   const stepNodes = steps.map((s,i)=>{
     const done = r.status==='resolved'||i<stepN;
     const active = !done&&i===stepN-1;
-    return `<div class="step-node">
-      <div class="step-circle ${done?'done':(active?'active':'')}"></div>
-      <div class="step-name ${done?'done':(active?'active':'')}">${s}</div>
-    </div>`;
+    return `<div class="step-node"><div class="step-circle ${done?'done':(active?'active':'')}"></div><div class="step-name ${done?'done':(active?'active':'')}">${s}</div></div>`;
   }).join('');
 
   let attachHTML = '';
@@ -960,10 +715,7 @@ function renderDetailContent(r) {
       const preview = isImg
         ? `<img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" onerror="this.parentElement.innerHTML='\uD83D\uDCCE'">`
         : `<div style="width:100%;height:100%;background:#222;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:28px;">\uD83C\uDFA5</div>`;
-      return `<div class="attachment-item" onclick="viewAttachment('${safeUrl}','${safeType}')" style="cursor:pointer;">
-        <div class="attachment-preview">${preview}</div>
-        <div class="attachment-name">${safeName}</div>
-      </div>`;
+      return `<div class="attachment-item" onclick="viewAttachment('${safeUrl}','${safeType}')" style="cursor:pointer;"><div class="attachment-preview">${preview}</div><div class="attachment-name">${safeName}</div></div>`;
     }).join('');
     attachHTML = `<div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Larawan/Video</div></div><div style="display:flex;gap:10px;padding:0 12px 12px;flex-wrap:wrap;">${thumbs}</div>`;
   }
@@ -974,11 +726,7 @@ function renderDetailContent(r) {
   const commentsHTML = sortedComments.length
     ? sortedComments.map(c => {
         const who = c.is_admin ? '\uD83D\uDCE2 Dispatcher' : escHtml(c.user_name || 'User');
-        return `<div class="comment-item">
-          <div><span class="comment-who">${who}</span>
-          <span class="comment-when"> \u00b7 ${getTimeAgo(c.created_at)}</span></div>
-          <div class="${c.is_admin ? 'lgu-comment' : ''}"><div class="comment-text">${escHtml(c.text)}</div></div>
-        </div>`;
+        return `<div class="comment-item"><div><span class="comment-who">${who}</span><span class="comment-when"> \u00b7 ${getTimeAgo(c.created_at)}</span></div><div class="${c.is_admin ? 'lgu-comment' : ''}"><div class="comment-text">${escHtml(c.text)}</div></div></div>`;
       }).join('')
     : '<div style="font-size:13px;color:#BDBDBD;text-align:center;padding:12px 0;">Wala pang komento</div>';
 
@@ -988,6 +736,30 @@ function renderDetailContent(r) {
   const _rAddr = (r.location && r.location.address) || '';
 
   const chipHtml = chipLabel(r.status);
+  
+  // Disable comment section logic based on status
+  const isClosed = (r.status === 'resolved' || r.status === 'false');
+  let commentBoxHtml = '';
+  
+  if (isClosed) {
+    commentBoxHtml = `
+      <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F0F0F0;opacity:0.7;">
+        <input type="text" disabled placeholder="Sarado na ang comment section."
+          style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;">
+      </div>
+    `;
+  } else {
+    commentBoxHtml = `
+      <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F5F5F7;">
+        <input type="text" id="comment-input" placeholder="Mag-comment..."
+          style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();submitComment('${r.id}');}">
+        <button type="button" id="comment-btn-submit" onclick="submitComment('${r.id}')"
+          style="background:#8B1A1A;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send</button>
+      </div>
+    `;
+  }
+
   document.getElementById('detail-content').innerHTML = `
     <div id="${_mapId}" style="height:200px;width:100%;flex-shrink:0;background:#C8D8B4;display:block;"></div>
     <div class="detail-hero">
@@ -1021,69 +793,46 @@ function renderDetailContent(r) {
     <div style="padding:0 12px;"><div class="section-title" style="padding:14px 0 8px;"><span class="section-dot"></span> Mga Komento / Updates</div></div>
     <div class="detail-comment-box">${commentsHTML}</div>
     <div style="padding:12px;">
-      <div class="input-field" style="border:1.5px solid #E5E5E5;background:#F5F5F7;">
-        
-        <input type="text" id="comment-input" placeholder="Mag-comment..."
-          style="flex:1;background:none;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();submitComment('${r.id}');}">
-          
-        <button type="button" id="comment-btn-submit" onclick="submitComment('${r.id}')"
-          style="background:#8B1A1A;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;">Send</button>
-      </div>
+      ${commentBoxHtml}
     </div>
     <div style="height:20px;"></div>`;
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (window._detailMap) {
-      try { window._detailMap.remove(); } catch(e) {}
-      window._detailMap = null;
-    }
+    if (window._detailMap) { try { window._detailMap.remove(); } catch(e) {} window._detailMap = null; }
     const _el = document.getElementById(_mapId);
     if (!_el || !window.L) return;
-    const _dm = L.map(_mapId, {
-      zoomControl: true, dragging: true,
-      scrollWheelZoom: false, doubleClickZoom: true,
-      touchZoom: true, boxZoom: false, keyboard: false,
-      attributionControl: false,
-    }).setView([_rLat, _rLng], 16);
+    const _dm = L.map(_mapId, { zoomControl: true, dragging: true, scrollWheelZoom: false, doubleClickZoom: true, touchZoom: true, boxZoom: false, keyboard: false, attributionControl: false }).setView([_rLat, _rLng], 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(_dm);
-    const _pin = L.divIcon({
-      html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4));">\uD83D\uDCCD</div>',
-      iconSize: [30, 36], iconAnchor: [15, 36], className: ''
-    });
+    const _pin = L.divIcon({ html: '<div style="font-size:30px;line-height:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4));">\uD83D\uDCCD</div>', iconSize: [30, 36], iconAnchor: [15, 36], className: '' });
     L.marker([_rLat, _rLng], { icon: _pin }).addTo(_dm);
     L.circle([_rLat, _rLng], { radius: 40, color: '#8B1A1A', fillColor: '#8B1A1A', fillOpacity: 0.12, weight: 2, opacity: 0.4 }).addTo(_dm);
-    if (_rAddr) {
-      L.popup({ closeButton: false, offset: [0, -30] })
-        .setLatLng([_rLat, _rLng])
-        .setContent(`<span style="font-size:12px;font-weight:600;">${escHtml(_rAddr)}</span>`)
-        .openOn(_dm);
-    }
+    if (_rAddr) { L.popup({ closeButton: false, offset: [0, -30] }).setLatLng([_rLat, _rLng]).setContent(`<span style="font-size:12px;font-weight:600;">${escHtml(_rAddr)}</span>`).openOn(_dm); }
     _dm.zoomControl.setPosition('bottomright');
     setTimeout(() => { if (_dm) _dm.invalidateSize(); }, 80);
     window._detailMap = _dm;
   }));
 }
 
-// ── SYSTEM NAVIGATION AND HISTORY API (GESTURES & RELOAD FIX) ──
+// ── SYSTEM NAVIGATION AND HISTORY API ──
 window.addEventListener('popstate', (e) => {
   const viewer = document.getElementById('media-viewer');
+  const notifModal = document.getElementById('pwa-notif-modal');
+  
+  if (notifModal && notifModal.classList.contains('show')) {
+      notifModal.classList.remove('show');
+      return;
+  }
   if (viewer && viewer.classList.contains('show')) {
      viewer.classList.remove('show');
      const content = document.getElementById('media-viewer-content');
      if (content) content.innerHTML = '';
      return;
   }
-
   if (screenStack.length > 0) {
     const _pname = screenStack.pop();
     const s = document.getElementById('screen-' + _pname);
     if (s) s.classList.remove('active');
-
-    if (_pname === 'detail' && window._detailMap) {
-      try { window._detailMap.remove(); } catch(err) {}
-      window._detailMap = null;
-    }
+    if (_pname === 'detail' && window._detailMap) { try { window._detailMap.remove(); } catch(err) {} window._detailMap = null; }
   } else {
      document.querySelectorAll('.screen.active').forEach(s => s.classList.remove('active'));
   }
@@ -1093,164 +842,109 @@ function pushScreen(name) {
   const s = document.getElementById('screen-'+name);
   if (!s) return;
   screenStack.push(name);
-  
-  // Hash with timestamp to ensure a unique browser history entry even on same page
   history.pushState({ screen: name }, '', `#${name}-${Date.now()}`);
-
   requestAnimationFrame(() => s.classList.add('active'));
   if (name==='aktibidad') setTimeout(renderAkt, 50);
   if (name==='submit') {
     selectedFiles=[]; document.getElementById('photo-previews').innerHTML='';
     document.getElementById('f-title').value=''; document.getElementById('f-detail').value='';
-    setTimeout(() => {
-      initMap();
-      prefillSubmitAddressFromHome();
-      setTimeout(requestGPS, 350);
-    }, 80);
+    setTimeout(() => { initMap(); prefillSubmitAddressFromHome(); setTimeout(requestGPS, 350); }, 80);
   }
   if (name==='editprofile') updateProfileUI();
 }
 
-// FIX: Bulletproof Back Button Logic
 function popScreen() {
   if (screenStack.length > 0) {
-    // If history is intact, go back natively to trigger popstate
-    if (window.history.state && window.history.state.screen) {
-      history.back();
-    } else {
-      // If history is broken (due to external reload/bug), manually close the screen
+    if (window.history.state && window.history.state.screen) { history.back(); } 
+    else {
       const _pname = screenStack.pop();
       const s = document.getElementById('screen-' + _pname);
       if (s) s.classList.remove('active');
-
-      if (_pname === 'detail' && window._detailMap) {
-        try { window._detailMap.remove(); } catch(err) {}
-        window._detailMap = null;
-      }
+      if (_pname === 'detail' && window._detailMap) { try { window._detailMap.remove(); } catch(err) {} window._detailMap = null; }
       try { history.replaceState({ root: true }, '', window.location.pathname); } catch(e) {}
     }
   } else {
-    // Failsafe
     document.querySelectorAll('.screen.active').forEach(s => s.classList.remove('active'));
     try { history.replaceState({ root: true }, '', window.location.pathname); } catch(e) {}
   }
 }
 
-// ── IMAGE/VIDEO ATTACHMENT VIEWER ──
+// ── MEDIA VIEWER ──
 function viewAttachment(url, type) {
-  const viewer = document.getElementById('media-viewer');
-  const content = document.getElementById('media-viewer-content');
+  const viewer = document.getElementById('media-viewer'), content = document.getElementById('media-viewer-content');
   if (!viewer || !content || !url) return;
-  
   const isVid = String(type || '').startsWith('video/');
-  content.innerHTML = isVid
-    ? `<video controls autoplay playsinline src="${url}" style="max-width:100%;max-height:84vh;border-radius:12px;background:#111;"></video>`
-    : `<img src="${url}" alt="Attachment" style="max-width:100%;max-height:84vh;border-radius:12px;background:#111;" onerror="window.open('${url}','_blank')">`;
-
+  content.innerHTML = isVid ? `<video controls autoplay playsinline src="${url}" style="max-width:100%;max-height:84vh;border-radius:12px;background:#111;"></video>` : `<img src="${url}" alt="Attachment" style="max-width:100%;max-height:84vh;border-radius:12px;background:#111;" onerror="window.open('${url}','_blank')">`;
   viewer.classList.add('show');
-  
   history.pushState({ modal: 'media' }, '', `#media-${Date.now()}`);
 }
 
 function closeMediaViewer(e) {
   if (e) e.stopPropagation();
   const viewer = document.getElementById('media-viewer');
-  if (viewer && viewer.classList.contains('show')) {
-     history.back();
-  }
+  if (viewer && viewer.classList.contains('show')) { history.back(); }
 }
 
-// ── ADD USER COMMENT (FADED SCREEN REMOVED) ──
+// ── COMMENTS ──
 async function submitComment(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna para mag-comment'); return; }
-
-  const inputEl = document.getElementById('comment-input');
-  const btnEl = document.getElementById('comment-btn-submit');
+  const inputEl = document.getElementById('comment-input'), btnEl = document.getElementById('comment-btn-submit');
   if (!inputEl) return;
   const text = inputEl.value.trim();
-
   if (!text) { showToast('⚠️ Walang naisulat na komento'); return; }
 
   const newComment = {
     user_id: currentUser.id,
     user_name: `${currentUserProfile?.first_name || 'User'} ${currentUserProfile?.last_name || ''}`.trim(),
-    text: text,
-    is_admin: false,
-    created_at: new Date().toISOString()
+    text: text, is_admin: false, created_at: new Date().toISOString()
   };
 
   inputEl.disabled = true;
-  if (btnEl) btnEl.textContent = '...'; // Visual cue for loading without fading screen
+  if (btnEl) btnEl.textContent = '...'; 
 
   try {
     const updatedReport = await db.addComment(reportId, newComment);
-
     const idx = userReports.findIndex(r => String(r.id) === String(reportId));
     if (idx >= 0) userReports[idx] = updatedReport;
     CACHE.set('reports', userReports);
 
     if (String(currentDetailReportId) === String(reportId)) {
-      // Fix: Preserve scroll position so it doesn't jump back to top!
       const scrollBox = document.getElementById('detail-content');
       const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
-      
       renderDetailContent(updatedReport);
-      
-      setTimeout(() => {
-        const newScrollBox = document.getElementById('detail-content');
-        if(newScrollBox) newScrollBox.scrollTop = scrollPos;
-      }, 10);
+      setTimeout(() => { const newScrollBox = document.getElementById('detail-content'); if(newScrollBox) newScrollBox.scrollTop = scrollPos; }, 10);
     }
-
-  } catch (err) {
-    console.error(err);
-    showToast('❌ Nabigong ipadala: ' + err.message);
-  } finally {
-    const refreshedInput = document.getElementById('comment-input');
-    const refreshedBtn = document.getElementById('comment-btn-submit');
-    if (refreshedInput) {
-       refreshedInput.disabled = false;
-       if(refreshedBtn) refreshedBtn.textContent = 'Send';
-    }
+  } catch (err) { showToast('❌ Nabigong ipadala: ' + err.message); } 
+  finally {
+    const refreshedInput = document.getElementById('comment-input'), refreshedBtn = document.getElementById('comment-btn-submit');
+    if (refreshedInput) { refreshedInput.disabled = false; if(refreshedBtn) refreshedBtn.textContent = 'Send'; }
   }
 }
 
-// ── DETAIL ──
 async function openDetail(reportId) {
   currentDetailReportId = reportId;
   let r = userReports.find(x => String(x.id) === String(reportId));
 
   if (r) {
-    renderDetailContent(r);
-    pushScreen('detail');
-    db.getReportById(reportId)
-      .then(fresh => {
+    renderDetailContent(r); pushScreen('detail');
+    db.getReportById(reportId).then(fresh => {
         if (!fresh) return;
         const i = userReports.findIndex(x => String(x.id) === String(reportId));
         if (i >= 0) userReports[i] = fresh;
-        if (String(currentDetailReportId) === String(reportId) &&
-            document.getElementById('screen-detail') &&
-            document.getElementById('screen-detail').classList.contains('active')) {
-          
+        if (String(currentDetailReportId) === String(reportId) && document.getElementById('screen-detail') && document.getElementById('screen-detail').classList.contains('active')) {
           const scrollBox = document.getElementById('detail-content');
           const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
           renderDetailContent(fresh);
           setTimeout(() => { if (scrollBox) scrollBox.scrollTop = scrollPos; }, 10);
         }
-      })
-      .catch(() => {});
+      }).catch(() => {});
   } else {
     showLoading(true);
     try {
-      r = await db.getReportById(reportId);
-      showLoading(false);
+      r = await db.getReportById(reportId); showLoading(false);
       if (!r) { showToast('\u274C Report not found'); return; }
-      renderDetailContent(r);
-      pushScreen('detail');
-    } catch (err) {
-      showLoading(false);
-      showToast('\u274C ' + err.message);
-    }
+      renderDetailContent(r); pushScreen('detail');
+    } catch (err) { showLoading(false); showToast('\u274C ' + err.message); }
   }
 }
 
@@ -1259,7 +953,6 @@ function renderDetail_wrapper(r) {
   if (String(currentDetailReportId) !== String(r.id)) return;
   const screen = document.getElementById('screen-detail');
   if (!screen || !screen.classList.contains('active')) return;
-  
   const scrollBox = document.getElementById('detail-content');
   const scrollPos = scrollBox ? scrollBox.scrollTop : 0;
   renderDetailContent(r);
@@ -1268,19 +961,13 @@ function renderDetail_wrapper(r) {
 
 async function upvoteReport(reportId) {
   if (!currentUser) { showToast('❌ Mag-login muna'); return; }
-  
   try {
     const updated = await db.upvoteReport(reportId, currentUser.id);
     const i = userReports.findIndex(x=>String(x.id)===String(reportId));
     if (i>=0) userReports[i] = updated;
-    
     renderAll();
-    
-    // Fixed: Uses renderDetail_wrapper instead of openDetail to avoid breaking the Back button
     if (String(currentDetailReportId)===String(reportId)) renderDetail_wrapper(updated);
-  } catch (err) {  
-    showToast('❌ ' + err.message); 
-  }
+  } catch (err) { showToast('❌ ' + err.message); }
 }
 
 function shareReport() {
@@ -1288,34 +975,24 @@ function shareReport() {
   else showToast('Share not available on this device');
 }
 
-// ── TAB SWITCHING ──
 function switchTab(tab) {
   if (tab === currentTab) return;
   document.getElementById('tab-'+currentTab).classList.remove('active');
   document.getElementById('tab-'+tab).classList.add('active');
   currentTab = tab;
-  ['home','reports','profile'].forEach(t => {
-    document.getElementById('nav-'+t).classList.toggle('active', t===tab);
-  });
+  ['home','reports','profile'].forEach(t => { document.getElementById('nav-'+t).classList.toggle('active', t===tab); });
   if (tab==='reports') renderReports();
   if (tab==='profile') renderProfileStats();
 }
 
-// ── PROFILE ──
 async function saveProfile() {
   showLoading(true);
   try {
     await db.updateUserProfile(currentUser.id, {
-      first_name: document.getElementById('edit-firstname').value,
-      last_name: document.getElementById('edit-lastname').value,
-      phone: document.getElementById('edit-phone').value,
-      barangay: document.getElementById('edit-brgy').value,
-      city: document.getElementById('edit-city').value,
+      first_name: document.getElementById('edit-firstname').value, last_name: document.getElementById('edit-lastname').value,
+      phone: document.getElementById('edit-phone').value, barangay: document.getElementById('edit-brgy').value, city: document.getElementById('edit-city').value,
     });
-    await loadUserProfile();
-    updateProfileUI(); renderProfileStats();
-    showLoading(false); showToast('✅ Profile updated!');
-    setTimeout(popScreen, 350);
+    await loadUserProfile(); updateProfileUI(); renderProfileStats(); showLoading(false); showToast('✅ Profile updated!'); setTimeout(popScreen, 350);
   } catch (err) { showLoading(false); showToast('❌ ' + err.message); }
 }
 
@@ -1446,21 +1123,6 @@ function getBestReportAddress() {
 function selectCat(el){document.querySelectorAll('#cat-grid .cat-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');selectedCat=el.dataset.cat;}
 function selectUrgency(el){document.querySelectorAll('.urgency-row .urgency-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');selectedUrgency=el.dataset.urg;}
 function toggleNotif(btn){btn.classList.toggle('on');btn.classList.toggle('off');showToast(btn.classList.contains('on')?'🔔 On':'🔔 Off');}
-
-// ── UTILITIES ──
-function showToast(msg) {
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>el.classList.remove('show'),2800);
-}
-
-function showLoading(show) {
-  const overlay=document.getElementById('loading-overlay');
-  if(!overlay) return;
-  if(show) overlay.classList.add('show');
-  else overlay.classList.remove('show');
-}
 
 // ══ SIGN UP SCREEN ══
 
